@@ -41,7 +41,7 @@ sea: agent-build
 
 sidecar-link: agent-build
 	@mkdir -p $(BINDIR)
-	@echo "#!/bin/sh\nnode $(CURDIR)/tendril-agent/dist/main.cjs \"\$$@\"" > $(BINDIR)/tendril-agent-$(TRIPLE)
+	@printf '#!/bin/sh\nnode %s/tendril-agent/dist/main.cjs "$$@"\n' "$(CURDIR)" > $(BINDIR)/tendril-agent-$(TRIPLE)
 	@chmod +x $(BINDIR)/tendril-agent-$(TRIPLE)
 	@DENO_PATH=$$(command -v deno 2>/dev/null) && \
 		if [ -n "$$DENO_PATH" ]; then \
