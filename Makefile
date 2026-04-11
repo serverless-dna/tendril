@@ -43,13 +43,8 @@ sidecar-link: agent-build
 	@mkdir -p $(BINDIR)
 	@printf '#!/bin/sh\nnode %s/tendril-agent/dist/main.cjs "$$@"\n' "$(CURDIR)" > $(BINDIR)/tendril-agent-$(TRIPLE)
 	@chmod +x $(BINDIR)/tendril-agent-$(TRIPLE)
-	@DENO_PATH=$$(command -v deno 2>/dev/null || true); \
-		if [ -n "$$DENO_PATH" ]; then \
-			ln -sf "$$DENO_PATH" $(BINDIR)/deno-$(TRIPLE); \
-		else \
-			echo "Warning: deno not found in PATH — sandbox execution will fail"; \
-			touch $(BINDIR)/deno-$(TRIPLE); \
-		fi
+	@DENO_PATH=$$(command -v deno 2>/dev/null) || { echo "Error: deno is required but not found in PATH. Install from https://deno.land"; exit 1; }; \
+		ln -sf "$$DENO_PATH" $(BINDIR)/deno-$(TRIPLE)
 
 # ── UI ────────────────────────────────────────────────────────
 
