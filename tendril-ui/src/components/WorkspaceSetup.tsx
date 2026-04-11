@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
 
 interface WorkspaceSetupProps {
   onInit: (path: string) => Promise<void>;
@@ -8,6 +9,13 @@ export function WorkspaceSetup({ onInit }: WorkspaceSetupProps) {
   const [path, setPath] = useState('~/tendril-workspace');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const handleBrowse = async () => {
+    const selected = await open({ directory: true, multiple: false, title: 'Choose workspace directory' });
+    if (selected) {
+      setPath(selected as string);
+    }
+  };
 
   const handleInit = async () => {
     setStatus('loading');
@@ -32,12 +40,20 @@ export function WorkspaceSetup({ onInit }: WorkspaceSetupProps) {
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Workspace Path
           </label>
-          <input
-            type="text"
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+            />
+            <button
+              onClick={handleBrowse}
+              className="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              Browse
+            </button>
+          </div>
         </div>
 
         <button
