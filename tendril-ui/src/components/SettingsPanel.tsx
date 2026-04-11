@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 interface SettingsConfig {
-  model: { modelId: string; region: string };
+  model: { modelId: string; region: string; profile?: string };
   sandbox: { timeoutMs: number };
   agent: { maxTurns: number };
 }
@@ -15,12 +15,13 @@ interface SettingsPanelProps {
 export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelProps) {
   const [modelId, setModelId] = useState(config.model.modelId);
   const [region, setRegion] = useState(config.model.region);
+  const [profile, setProfile] = useState(config.model.profile ?? '');
   const [timeoutMs, setTimeoutMs] = useState(config.sandbox.timeoutMs);
   const [maxTurns, setMaxTurns] = useState(config.agent.maxTurns);
 
   const handleSave = () => {
     onSave({
-      model: { modelId, region },
+      model: { modelId, region, profile: profile || undefined },
       sandbox: { timeoutMs },
       agent: { maxTurns },
     });
@@ -55,6 +56,20 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
             onChange={(e) => setRegion(e.target.value)}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            AWS Profile
+          </label>
+          <input
+            type="text"
+            value={profile}
+            onChange={(e) => setProfile(e.target.value)}
+            placeholder="default"
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+          />
+          <p className="text-xs text-gray-400 mt-1">Leave blank to use the default credential chain</p>
         </div>
 
         <div>

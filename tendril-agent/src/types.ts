@@ -22,6 +22,7 @@ export interface ModelConfig {
   provider: string;
   modelId: string;
   region: string;
+  profile?: string;
 }
 
 export interface SandboxConfig {

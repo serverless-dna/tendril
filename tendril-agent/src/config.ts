@@ -7,6 +7,7 @@ const DEFAULTS: WorkspaceConfig = {
     provider: 'bedrock',
     modelId: 'us.anthropic.claude-sonnet-4-5-20250514',
     region: 'us-east-1',
+    profile: undefined,
   },
   sandbox: {
     denoPath: 'deno',
@@ -35,6 +36,7 @@ export function readConfig(workspacePath: string): WorkspaceConfig {
       provider: raw.model?.provider ?? DEFAULTS.model.provider,
       modelId: raw.model?.modelId ?? DEFAULTS.model.modelId,
       region: raw.model?.region ?? DEFAULTS.model.region,
+      profile: raw.model?.profile ?? DEFAULTS.model.profile,
     },
     sandbox: {
       denoPath: raw.sandbox?.denoPath ?? DEFAULTS.sandbox.denoPath,
