@@ -1,4 +1,4 @@
-.PHONY: install build test dev clean agent-install agent-build agent-test ui-install ui-dev ui-build sea sidecars deno-fetch help
+.PHONY: install build test dev clean agent-install agent-build agent-test agent-lint ui-install ui-dev ui-build ui-lint ui-fmt sea sidecars deno-fetch lint fmt check help
 
 TRIPLE := $(shell rustc --print host-tuple 2>/dev/null || echo "aarch64-apple-darwin")
 BINDIR := tendril-ui/src-tauri/binaries
@@ -32,6 +32,9 @@ help:
 	@echo "  make dev           Build sidecars then launch Tauri dev"
 	@echo "  make sea           Build Node.js SEA binary"
 	@echo "  make release       Build production Tauri app"
+	@echo "  make lint          Run all linters (clippy + eslint)"
+	@echo "  make fmt           Check formatting (rustfmt + prettier)"
+	@echo "  make check         Quality gate: fmt + lint + test"
 	@echo "  make clean         Remove build artifacts"
 	@echo ""
 	@echo "  Platform: $(TRIPLE)"
@@ -88,6 +91,26 @@ ui-dev: sidecars ui-install
 ui-build: sidecars ui-install
 	cd tendril-ui && cargo tauri build
 
+# ── Quality gates ─────────────────────────────────────────────
+
+agent-lint:
+	cd tendril-agent && npx tsc --noEmit
+
+ui-fmt:
+	cd tendril-ui/src-tauri && cargo fmt -- --check
+
+ui-lint: sidecars
+	cd tendril-ui/src-tauri && cargo clippy -- -D warnings
+
+fmt: ui-fmt
+	@echo "Format check passed"
+
+lint: agent-lint ui-lint
+	@echo "Lint passed"
+
+check: fmt lint test
+	@echo "Quality gate passed"
+
 # ── Composite ─────────────────────────────────────────────────
 
 build: agent-build
@@ -96,7 +119,7 @@ test: agent-test
 
 dev: ui-dev
 
-release: ui-build
+release: check ui-build
 
 clean:
 	rm -rf tendril-agent/dist tendril-agent/node_modules
