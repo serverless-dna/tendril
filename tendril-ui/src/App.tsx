@@ -5,9 +5,10 @@ import { ChatView } from './components/ChatView';
 import { CapabilityBrowser } from './components/CapabilityBrowser';
 import { SettingsPanel } from './components/SettingsPanel';
 import { WorkspaceSetup } from './components/WorkspaceSetup';
+import { DebugPanel } from './components/DebugPanel';
 import { useCapabilities } from './hooks/useCapabilities';
 
-type Tab = 'chat' | 'capabilities' | 'settings';
+type Tab = 'chat' | 'capabilities' | 'settings' | 'debug';
 
 const WORKSPACE_PATH = '~/tendril-workspace'.replace('~', '/Users'); // Resolved at runtime
 
@@ -68,6 +69,7 @@ function AppContent() {
     { id: 'chat', label: 'Chat' },
     { id: 'capabilities', label: 'Capabilities' },
     { id: 'settings', label: 'Settings' },
+    { id: 'debug', label: 'Debug' },
   ];
 
   return (
@@ -109,6 +111,7 @@ function AppContent() {
             onSave={handleSaveConfig}
           />
         )}
+        {activeTab === 'debug' && <DebugPanel />}
       </div>
     </div>
   );
