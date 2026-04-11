@@ -10,10 +10,9 @@ export function WorkspaceSetup({ onInit }: WorkspaceSetupProps) {
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleInit = async () => {
-    const expanded = path.replace(/^~/, process.env.HOME ?? '/tmp');
     setStatus('loading');
     try {
-      await onInit(expanded);
+      await onInit(path.trim());
       setStatus('success');
     } catch (err) {
       setStatus('error');

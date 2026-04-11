@@ -16,9 +16,19 @@ async fn cancel_prompt() -> Result<(), String> {
     acp::send_cancel().await.map_err(|e| e.to_string())
 }
 
+fn expand_tilde(path: &str) -> String {
+    if path.starts_with("~/") || path == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return path.replacen('~', &home.to_string_lossy(), 1);
+        }
+    }
+    path.to_string()
+}
+
 #[tauri::command]
 async fn init_workspace(path: String) -> Result<(), String> {
-    let workspace = Path::new(&path);
+    let expanded = expand_tilde(&path);
+    let workspace = Path::new(&expanded);
 
     // Create directory structure
     fs::create_dir_all(workspace.join("tools")).map_err(|e| e.to_string())?;
@@ -61,7 +71,8 @@ async fn init_workspace(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn read_capabilities(path: String) -> Result<Vec<Value>, String> {
-    let index_path = Path::new(&path).join("index.json");
+    let expanded = expand_tilde(&path);
+    let index_path = Path::new(&expanded).join("index.json");
     if !index_path.exists() {
         return Ok(vec![]);
     }
@@ -77,7 +88,8 @@ async fn read_capabilities(path: String) -> Result<Vec<Value>, String> {
 
 #[tauri::command]
 async fn read_config(path: String) -> Result<Value, String> {
-    let config_path = Path::new(&path).join(".tendril").join("config.json");
+    let expanded = expand_tilde(&path);
+    let config_path = Path::new(&expanded).join(".tendril").join("config.json");
     if !config_path.exists() {
         return Err("Config not found".to_string());
     }
@@ -87,8 +99,9 @@ async fn read_config(path: String) -> Result<Value, String> {
 
 #[tauri::command]
 async fn write_config(path: String, config: Value) -> Result<(), String> {
-    let config_path = Path::new(&path).join(".tendril").join("config.json");
-    fs::create_dir_all(Path::new(&path).join(".tendril")).map_err(|e| e.to_string())?;
+    let expanded = expand_tilde(&path);
+    let config_path = Path::new(&expanded).join(".tendril").join("config.json");
+    fs::create_dir_all(Path::new(&expanded).join(".tendril")).map_err(|e| e.to_string())?;
     fs::write(
         &config_path,
         serde_json::to_string_pretty(&config).unwrap(),
