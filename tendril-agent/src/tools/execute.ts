@@ -10,13 +10,14 @@ export const executeCode = (workspacePath: string) =>
       'Execute TypeScript code in the Deno sandbox. Output via console.log() is returned as the result.',
     inputSchema: z.object({
       code: z.string().describe('TypeScript code to execute'),
-      args: z.record(z.unknown()).optional().describe('Optional arguments object passed to the code'),
+      args: z.string().optional().describe('Optional JSON string of arguments object passed to the code'),
     }),
     callback: async ({ code, args }) => {
       const config = readConfig(workspacePath);
+      const parsedArgs = args ? JSON.parse(args) : {};
       return executeDeno(
         code,
-        args ?? {},
+        parsedArgs,
         workspacePath,
         config.sandbox.denoPath,
         config.sandbox.timeoutMs,
