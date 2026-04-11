@@ -13,3 +13,4 @@ All notable changes to the Tendril project will be documented in this file.
 - Tauri sidecar configuration for bundling both tendril-agent and Deno binaries
 - Full ACP Agent Integrator Specification v1.0.0 compliance (MVP subset: initialize, new_session, prompt, cancel, shutdown)
 - TailwindCSS v4 styling across all React components
+- Makefile with dev, build, test, sea, release, and clean targets
