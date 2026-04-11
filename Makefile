@@ -2,7 +2,7 @@
 
 TRIPLE := $(shell rustc --print host-tuple 2>/dev/null || echo "aarch64-apple-darwin")
 BINDIR := tendril-ui/src-tauri/binaries
-DENO_VERSION := 2.3.3
+DENO_VERSION := 2.7.12
 
 # Map Rust target triple to Deno download target
 ifeq ($(TRIPLE),aarch64-apple-darwin)
