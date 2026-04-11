@@ -43,7 +43,7 @@ sidecar-link: agent-build
 	@mkdir -p $(BINDIR)
 	@printf '#!/bin/sh\nnode %s/tendril-agent/dist/main.cjs "$$@"\n' "$(CURDIR)" > $(BINDIR)/tendril-agent-$(TRIPLE)
 	@chmod +x $(BINDIR)/tendril-agent-$(TRIPLE)
-	@DENO_PATH=$$(command -v deno 2>/dev/null) && \
+	@DENO_PATH=$$(command -v deno 2>/dev/null || true); \
 		if [ -n "$$DENO_PATH" ]; then \
 			ln -sf "$$DENO_PATH" $(BINDIR)/deno-$(TRIPLE); \
 		else \
