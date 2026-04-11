@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicktomlin/tauri-settings-schema/main/schema.json",
+  "productName": "Tendril",
+  "version": "0.1.0",
+  "identifier": "com.serverless-dna.tendril",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "title": "Tendril",
+    "windows": [
+      {
+        "title": "Tendril",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [],
+    "externalBin": [
+      "binaries/tendril-agent",
+      "binaries/deno"
+    ]
+  }
+}

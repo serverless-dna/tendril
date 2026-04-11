@@ -1,0 +1,26 @@
+{
+  "name": "tendril-agent",
+  "version": "0.1.0",
+  "description": "Tendril agentic sandbox — ACP sidecar powered by Strands SDK",
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --outfile=dist/main.cjs --format=cjs",
+    "build:sea": "npm run build && node --experimental-sea-config sea-config.json && cp $(command -v node) dist/tendril-agent && codesign --remove-signature dist/tendril-agent && npx postject dist/tendril-agent NODE_SEA_BLOB dist/sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 --macho-segment-name NODE_SEA && codesign --sign - dist/tendril-agent",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@strands-agents/sdk": "^1.0.0-rc.3",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

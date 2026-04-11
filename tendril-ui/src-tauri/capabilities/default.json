@@ -1,0 +1,21 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for Tendril",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        { "name": "binaries/tendril-agent", "sidecar": true },
+        { "name": "binaries/deno", "sidecar": true }
+      ]
+    },
+    {
+      "identifier": "shell:allow-stdin-write",
+      "allow": [
+        { "name": "binaries/tendril-agent", "sidecar": true }
+      ]
+    }
+  ]
+}
