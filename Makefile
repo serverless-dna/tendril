@@ -1,4 +1,7 @@
-.PHONY: install build test dev clean agent-install agent-build agent-test ui-install ui-dev ui-build sea help
+.PHONY: install build test dev clean agent-install agent-build agent-test ui-install ui-dev ui-build sea sidecar-link help
+
+TRIPLE := $(shell rustc --print host-tuple 2>/dev/null || echo "aarch64-apple-darwin")
+BINDIR := tendril-ui/src-tauri/binaries
 
 # Default target
 help:
@@ -34,9 +37,23 @@ agent-test:
 sea: agent-build
 	cd tendril-agent && npm run build:sea
 
+# ── Sidecar linking (dev mode) ────────────────────────────────
+
+sidecar-link: agent-build
+	@mkdir -p $(BINDIR)
+	@echo "#!/bin/sh\nnode $(CURDIR)/tendril-agent/dist/main.cjs \"\$$@\"" > $(BINDIR)/tendril-agent-$(TRIPLE)
+	@chmod +x $(BINDIR)/tendril-agent-$(TRIPLE)
+	@DENO_PATH=$$(command -v deno 2>/dev/null) && \
+		if [ -n "$$DENO_PATH" ]; then \
+			ln -sf "$$DENO_PATH" $(BINDIR)/deno-$(TRIPLE); \
+		else \
+			echo "Warning: deno not found in PATH — sandbox execution will fail"; \
+			touch $(BINDIR)/deno-$(TRIPLE); \
+		fi
+
 # ── UI ────────────────────────────────────────────────────────
 
-ui-dev: agent-build ui-install
+ui-dev: sidecar-link ui-install
 	cd tendril-ui && cargo tauri dev
 
 ui-build: agent-build ui-install
