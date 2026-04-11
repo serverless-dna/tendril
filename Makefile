@@ -25,7 +25,7 @@ ui-install:
 
 # ── Agent ─────────────────────────────────────────────────────
 
-agent-build:
+agent-build: agent-install
 	cd tendril-agent && npm run build
 
 agent-test:
@@ -36,10 +36,10 @@ sea: agent-build
 
 # ── UI ────────────────────────────────────────────────────────
 
-ui-dev: agent-build
+ui-dev: agent-build ui-install
 	cd tendril-ui && cargo tauri dev
 
-ui-build: agent-build
+ui-build: agent-build ui-install
 	cd tendril-ui && cargo tauri build
 
 # ── Composite ─────────────────────────────────────────────────
