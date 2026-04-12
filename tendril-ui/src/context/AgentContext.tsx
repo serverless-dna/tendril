@@ -76,7 +76,24 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
       const msgs = [...state.messages];
       const last = msgs[msgs.length - 1];
       if (last?.role === 'assistant') {
-        msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
+        // If the current assistant message has completed tool calls, the new text
+        // is the post-tool response — start a fresh bubble so it appears after them
+        const hasCompletedTools = last.toolCalls.some((tc) => tc.status === 'completed');
+        if (hasCompletedTools && last.text === '') {
+          // Empty post-tool message already started — just append
+          msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
+        } else if (hasCompletedTools) {
+          // Start new bubble for post-tool response
+          return {
+            ...state,
+            messages: [
+              ...msgs,
+              { id: nextMsgId(), role: 'assistant', text: action.text, toolCalls: [] },
+            ],
+          };
+        } else {
+          msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
+        }
       }
       return { ...state, messages: msgs };
     }
