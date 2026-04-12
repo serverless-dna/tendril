@@ -30,6 +30,7 @@ const agent = createAgent(config, workspacePath);
 
 let turnStartTime = 0;
 let turnToolCallCounter = 0;
+let lastUsage: { inputTokens: number; outputTokens: number } | null = null;
 
 const ctx: ProtocolContext = {
   sessionId: null,
@@ -47,17 +48,14 @@ const ctx: ProtocolContext = {
     }
 
     try {
+      lastUsage = null;
       const stream = agent.stream(userText);
-      let lastResult: unknown = undefined;
 
       for await (const event of stream) {
         handleStreamEvent(event);
-        lastResult = event;
       }
 
-      // Extract metrics from the final event
-      const metrics = extractMetrics(lastResult);
-      emitTurnEnd(metrics);
+      emitTurnEnd();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[tendril-agent] Error: ${message}\n`);
@@ -68,7 +66,7 @@ const ctx: ProtocolContext = {
         emitUpdate({ sessionUpdate: 'error', message });
       }
 
-      emitTurnEnd(undefined);
+      emitTurnEnd();
     }
   },
 
@@ -76,11 +74,6 @@ const ctx: ProtocolContext = {
     agent.cancel();
   },
 };
-
-interface AgentMetrics {
-  accumulatedUsage?: { inputTokens?: number; outputTokens?: number };
-  cycleCount?: number;
-}
 
 function extractTextContent(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -100,28 +93,43 @@ function handleStreamEvent(event: unknown): void {
   const e = event as Record<string, unknown>;
   const type = (e.type as string) ?? e.constructor?.name ?? 'unknown';
 
-  // Log event type and keys for diagnostics
-  const keys = Object.keys(e).filter(k => k !== 'constructor');
-  process.stderr.write(`[stream] ${type} keys=${JSON.stringify(keys)}\n`);
+  // modelStreamUpdateEvent — nested at event.event.delta.text
+  if (type === 'modelStreamUpdateEvent') {
+    const inner = e.event as Record<string, unknown> | undefined;
+    if (!inner) return;
+    const innerType = inner.type as string;
 
-  // For modelStreamUpdateEvent, log the actual data structure
-  if (type.includes('modelStream') || type.includes('ModelStream')) {
-    process.stderr.write(`[stream-data] ${JSON.stringify(e, (_, v) => typeof v === 'function' ? '[fn]' : v)}\n`);
-  }
+    // Text delta
+    if (innerType === 'modelContentBlockDeltaEvent') {
+      const delta = inner.delta as Record<string, unknown> | undefined;
+      const text = delta?.text as string | undefined;
+      if (text) {
+        emitUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          text,
+          content: { type: 'text', text },
+        });
+      }
+      return;
+    }
 
-  // Text streaming — try multiple field patterns
-  const delta = (e.delta as string) ?? (e.text as string) ?? (e.data as Record<string,unknown>)?.delta as string ?? (e.data as Record<string,unknown>)?.text as string ?? (e.chunk as string) ?? '';
-  if (delta && (type.includes('Stream') || type.includes('stream') || type.includes('ContentBlock') || type.includes('content_block'))) {
-    emitUpdate({
-      sessionUpdate: 'agent_message_chunk',
-      text: delta,
-      content: { type: 'text', text: delta },
-    });
+    // Metadata (tokens)
+    if (innerType === 'modelMetadataEvent') {
+      const usage = inner.usage as Record<string, number> | undefined;
+      if (usage) {
+        lastUsage = {
+          inputTokens: usage.inputTokens ?? 0,
+          outputTokens: usage.outputTokens ?? 0,
+        };
+      }
+      return;
+    }
+
     return;
   }
 
-  // Tool call announced
-  if (type.includes('ToolCall') || type.includes('tool_call') || type.includes('BeforeTool') || type.includes('before_tool')) {
+  // Tool call announced — beforeToolCallEvent
+  if (type === 'beforeToolCallEvent') {
     turnToolCallCounter++;
     const toolUse = (e.toolUse as Record<string, unknown>) ?? e;
     emitUpdate({
@@ -134,8 +142,8 @@ function handleStreamEvent(event: unknown): void {
     return;
   }
 
-  // Tool result
-  if (type.includes('ToolResult') || type.includes('tool_result')) {
+  // Tool result — toolResultEvent
+  if (type === 'toolResultEvent') {
     emitUpdate({
       sessionUpdate: 'tool_call_update',
       toolCallId: (e.toolUseId as string) ?? `tool-${turnToolCallCounter}`,
@@ -147,21 +155,10 @@ function handleStreamEvent(event: unknown): void {
   }
 }
 
-function extractMetrics(lastEvent: unknown): AgentMetrics | undefined {
-  if (!lastEvent || typeof lastEvent !== 'object') return undefined;
-  const e = lastEvent as Record<string, unknown>;
-  if (e.metrics) return e.metrics as AgentMetrics;
-  if (e.result && typeof e.result === 'object') {
-    const r = e.result as Record<string, unknown>;
-    if (r.metrics) return r.metrics as AgentMetrics;
-  }
-  return undefined;
-}
-
-function emitTurnEnd(metrics: AgentMetrics | undefined): void {
+function emitTurnEnd(): void {
   const durationMs = Date.now() - turnStartTime;
-  const inputTokens = metrics?.accumulatedUsage?.inputTokens ?? 0;
-  const outputTokens = metrics?.accumulatedUsage?.outputTokens ?? 0;
+  const inputTokens = lastUsage?.inputTokens ?? 0;
+  const outputTokens = lastUsage?.outputTokens ?? 0;
   const totalTokens = inputTokens + outputTokens;
 
   emitUpdate({
