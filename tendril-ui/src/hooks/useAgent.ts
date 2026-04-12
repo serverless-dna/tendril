@@ -70,20 +70,28 @@ export function useAgent() {
       );
 
       unlisten.push(
-        await listen<{ stage: string; error?: string }>('session-lifecycle', (event) => {
-          if (event.payload.stage === 'connected') {
+        await listen<{ stage?: string; sessionUpdate?: string; error?: string; agent_info?: string }>('session-lifecycle', (event) => {
+          const stage = event.payload.stage;
+          if (stage === 'connected') {
             dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
-          } else if (event.payload.stage === 'error') {
-            dispatch({ type: 'SET_ERROR', error: event.payload.error ?? 'Unknown error' });
+          } else if (stage === 'error' || stage === 'auth_failed') {
+            dispatch({ type: 'SET_ERROR', error: event.payload.error ?? 'Connection failed' });
+            dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
           }
         }),
       );
 
       unlisten.push(
-        await listen<{ message: string }>('agent-error', (event) => {
-          dispatch({ type: 'SET_ERROR', error: event.payload.message });
+        await listen<{ message?: string; sessionUpdate?: string }>('agent-error', (event) => {
+          dispatch({ type: 'SET_ERROR', error: event.payload.message ?? 'Unknown error' });
         }),
       );
+
+      // Check if we missed the connected event (race condition on startup)
+      // Give the agent 2s to connect, then check
+      setTimeout(() => {
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+      }, 2000);
     };
 
     setup();
