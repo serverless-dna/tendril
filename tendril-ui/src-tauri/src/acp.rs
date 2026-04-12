@@ -34,6 +34,15 @@ fn agent_state() -> &'static Mutex<Option<AgentProcess>> {
 }
 
 pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
+    // Guard: don't spawn a second agent if one is already running
+    {
+        let state = agent_state().lock().await;
+        if state.is_some() {
+            eprintln!("[acp] Agent already connected — skipping");
+            return Ok(());
+        }
+    }
+
     eprintln!("[acp] Spawning tendril-agent sidecar...");
 
     let shell = app.shell();
