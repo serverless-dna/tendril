@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer } from 'react';
+import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import { listen } from '@tauri-apps/api/event';
 
 export interface Message {
   id: string;
@@ -138,6 +139,28 @@ const AgentContext = createContext<{
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(agentReducer, initialState);
+
+  // Listen for lifecycle events at provider level so we never miss them
+  useEffect(() => {
+    const cleanups: Array<() => void> = [];
+
+    listen<{ stage?: string; error?: string }>('session-lifecycle', (event) => {
+      const stage = event.payload.stage;
+      if (stage === 'connected') {
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+      } else if (stage === 'error' || stage === 'auth_failed') {
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+        dispatch({ type: 'SET_ERROR', error: event.payload.error ?? 'Connection failed' });
+      }
+    }).then((fn) => cleanups.push(fn));
+
+    listen<{ message?: string }>('agent-error', (event) => {
+      dispatch({ type: 'SET_ERROR', error: event.payload.message ?? 'Unknown error' });
+    }).then((fn) => cleanups.push(fn));
+
+    return () => cleanups.forEach((fn) => fn());
+  }, []);
+
   return <AgentContext.Provider value={{ state, dispatch }}>{children}</AgentContext.Provider>;
 }
 
