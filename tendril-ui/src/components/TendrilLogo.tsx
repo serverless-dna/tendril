@@ -1,23 +1,23 @@
 import React from 'react';
 
-// 16x16 — central dot, 6 tendrils radiating outward like a starburst organism
+// 16x16 — organic tendril growth, asymmetric, curving paths from a small center
 const pixels = [
-  'P...........P...',
-  '.P.......P.P....',
-  '..P.....P.P.....',
-  '...P...P.P......',
+  '..........P.....',
+  '.........PP.....',
+  '........P.......',
+  '...P...P........',
+  '..PP..P.........',
+  '...PPPP.........',
+  '....PPP.P.......',
+  '...PPPP..PP.....',
+  '..PP.......P....',
+  '.P..PP......P...',
   '....P.PP........',
-  '.....PP.........',
-  'PPPPPPPPPPP.....',
-  '.....PP.........',
-  '....P.PP........',
-  '...P...P.P......',
-  '..P.....P.P.....',
-  '.P.......P.P....',
-  'P.........P.P...',
-  '...........P....',
-  '................',
-  '................',
+  '...P...PP.......',
+  '..P.....PP......',
+  '.P.......P......',
+  '.........PP.....',
+  '..........P.....',
 ];
 
 const colors: Record<string, string> = {
