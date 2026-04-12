@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 interface SettingsConfig {
   workspace?: string;
   model: { modelId: string; region: string; profile?: string };
-  sandbox: { timeoutMs: number };
+  sandbox: { timeoutMs: number; allowedDomains?: string[] };
   agent: { maxTurns: number };
 }
 
@@ -18,13 +18,16 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
   const [region, setRegion] = useState(config.model?.region ?? '');
   const [profile, setProfile] = useState(config.model?.profile ?? '');
   const [timeoutMs, setTimeoutMs] = useState(config.sandbox?.timeoutMs ?? 45000);
+  const [networkUnrestricted, setNetworkUnrestricted] = useState(
+    !config.sandbox?.allowedDomains || config.sandbox.allowedDomains.length === 0
+  );
   const [maxTurns, setMaxTurns] = useState(config.agent?.maxTurns ?? 100);
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
     onSave({
       model: { modelId, region, profile: profile || undefined },
-      sandbox: { timeoutMs },
+      sandbox: { timeoutMs, allowedDomains: networkUnrestricted ? [] : config.sandbox?.allowedDomains ?? [] },
       agent: { maxTurns },
     });
     setSaved(true);
@@ -109,6 +112,25 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
             onChange={(e) => setTimeoutMs(Number(e.target.value))}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
           />
+        </div>
+
+        <div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={networkUnrestricted}
+              onChange={(e) => setNetworkUnrestricted(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Allow unrestricted network access
+            </span>
+          </label>
+          <p className="text-xs text-gray-400 mt-1 ml-7">
+            {networkUnrestricted
+              ? 'Tools can fetch any URL. Disable to restrict to specific domains.'
+              : `Restricted to: ${(config.sandbox?.allowedDomains ?? []).join(', ') || 'none (all blocked)'}`}
+          </p>
         </div>
 
         <div>
