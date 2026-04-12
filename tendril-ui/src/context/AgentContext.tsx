@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 
 let msgCounter = 0;
@@ -137,18 +137,45 @@ const initialState: AgentState = {
   error: null,
 };
 
+export interface DebugEntry {
+  id: number;
+  direction: string;
+  message: unknown;
+  timestamp?: string;
+}
+
 const AgentContext = createContext<{
   state: AgentState;
   dispatch: React.Dispatch<AgentAction>;
-}>({ state: initialState, dispatch: () => {} });
+  debugLog: DebugEntry[];
+}>({ state: initialState, dispatch: () => {}, debugLog: [] });
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(agentReducer, initialState);
+  const [debugLog, setDebugLog] = useState<DebugEntry[]>([]);
+  const debugCounterRef = useRef(0);
 
-  // Listen for lifecycle events at provider level so we never miss them
+  // Listen for ALL events at provider level so we never miss them
   useEffect(() => {
     let cancelled = false;
     const cleanups: Array<() => void> = [];
+
+    // Debug event collector — always active
+    listen<{ direction: string; message: unknown; timestamp?: string }>(
+      'agent-debug',
+      (event) => {
+        debugCounterRef.current += 1;
+        setDebugLog((prev) => [
+          ...prev.slice(-500),
+          {
+            id: debugCounterRef.current,
+            direction: event.payload.direction,
+            message: event.payload.message,
+            timestamp: event.payload.timestamp,
+          },
+        ]);
+      },
+    ).then((fn) => { if (!cancelled) cleanups.push(fn); });
 
     const setup = async () => {
       const unlistenLifecycle = await listen('session-lifecycle', (event: { payload: unknown }) => {
@@ -189,7 +216,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; cleanups.forEach((fn) => fn()); };
   }, []);
 
-  return <AgentContext.Provider value={{ state, dispatch }}>{children}</AgentContext.Provider>;
+  return <AgentContext.Provider value={{ state, dispatch, debugLog }}>{children}</AgentContext.Provider>;
 }
 
 export function useAgentState() {
