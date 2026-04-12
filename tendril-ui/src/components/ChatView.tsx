@@ -51,9 +51,13 @@ export function ChatView() {
             <p className="text-sm mt-2">Tendril will build tools as it needs them</p>
           </div>
         )}
-        {messages.map((msg) => (
+        {messages.map((msg, idx) => (
           <div key={msg.id}>
-            <MessageBubble role={msg.role} text={msg.text} />
+            <MessageBubble
+              role={msg.role}
+              text={msg.text}
+              isStreaming={isProcessing && msg.role === 'assistant' && idx === messages.length - 1}
+            />
             {msg.toolCalls.map((tc) => (
               <ToolTrace key={tc.toolCallId} {...tc} />
             ))}

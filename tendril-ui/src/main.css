@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
 
 html, body, #root {
   height: 100%;
@@ -8,4 +10,35 @@ html, body, #root {
 input, textarea {
   -webkit-text-size-adjust: 100%;
   text-transform: none;
+}
+
+/* Streamdown requires these CSS custom properties (shadcn/ui convention) */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 3.9%;
+  --border: 0 0% 89.8%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 98%;
+  --muted: 0 0% 96.1%;
+  --muted-foreground: 0 0% 45.1%;
+  --radius: 0.5rem;
+}
+
+.dark, [data-theme="dark"] {
+  --background: 0 0% 3.9%;
+  --foreground: 0 0% 98%;
+  --border: 0 0% 14.9%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
+  --muted: 0 0% 14.9%;
+  --muted-foreground: 0 0% 63.9%;
+}
+
+/* Force dark mode (Tendril is always dark) */
+html {
+  color-scheme: dark;
+}
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
