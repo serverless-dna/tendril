@@ -10,9 +10,9 @@ interface ToolTraceProps {
 }
 
 const statusColors = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  completed: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
+  pending: 'bg-yellow-500/20 text-yellow-300',
+  completed: 'bg-green-500/20 text-green-300',
+  failed: 'bg-red-500/20 text-red-300',
 };
 
 function summarizeInput(title: string, input: Record<string, unknown>): string {
@@ -26,12 +26,26 @@ function summarizeInput(title: string, input: Record<string, unknown>): string {
       return def?.name ? String(def.name) : '';
     }
     case 'execute':
-      return input.code ? `${String(input.code).slice(0, 60).trim()}...` : '';
+      return input.code ? `${String(input.code).trim().slice(0, 50)}…` : '';
     default: {
       const first = Object.values(input).find((v) => typeof v === 'string' && v.length > 0);
-      return first ? String(first).slice(0, 60) : '';
+      return first ? String(first).slice(0, 50) : '';
     }
   }
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`w-3 h-3 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  );
 }
 
 export function ToolTrace({ title, input, status, output }: ToolTraceProps) {
@@ -39,30 +53,42 @@ export function ToolTrace({ title, input, status, output }: ToolTraceProps) {
   const summary = summarizeInput(title, input);
 
   return (
-    <div className="ml-4 my-1 border-l-2 border-gray-300 dark:border-gray-600 pl-3">
+    <div className="ml-4 my-1.5">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 w-full text-left"
+        className="flex items-center gap-2 text-xs w-full text-left py-1 px-2 rounded hover:bg-gray-800/50"
       >
-        <span className="font-mono font-semibold text-gray-300">{title}</span>
+        <Chevron open={expanded} />
+        <span className="font-mono font-semibold text-gray-200">{title}</span>
         {summary && (
-          <span className="text-gray-500 truncate max-w-[300px]">{summary}</span>
+          <span className="text-gray-500 truncate max-w-[280px] font-mono">{summary}</span>
         )}
-        <span className={`px-1.5 py-0.5 rounded text-xs flex-shrink-0 ${statusColors[status]}`}>
+        <span className={`px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 ${statusColors[status]}`}>
           {status}
         </span>
-        <span className="ml-auto flex-shrink-0">{expanded ? '▾' : '▸'}</span>
       </button>
       {expanded && (
-        <div className="mt-1 text-xs">
-          <div className="bg-gray-50 dark:bg-gray-900 rounded p-2 mb-1">
-            <div className="text-gray-500 mb-1">Input:</div>
-            <pre className="font-mono whitespace-pre-wrap text-gray-400">{JSON.stringify(input, null, 2)}</pre>
+        <div className="mt-1 ml-5 space-y-2 text-xs">
+          <div className="rounded border border-gray-700 bg-gray-900 p-3">
+            <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-1.5">Input</div>
+            <pre className="font-mono whitespace-pre-wrap text-gray-300 leading-relaxed">
+              {JSON.stringify(input, null, 2)}
+            </pre>
           </div>
           {output && (
-            <div className="bg-gray-50 dark:bg-gray-900 rounded p-2">
-              <div className="text-gray-500 mb-1">Output:</div>
-              <pre className="font-mono whitespace-pre-wrap max-h-40 overflow-auto text-gray-400">{output}</pre>
+            <div className="rounded border border-gray-700 bg-gray-900 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-gray-500 text-[10px] uppercase tracking-wider">Output</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(output); }}
+                  className="text-[10px] text-gray-600 hover:text-gray-400"
+                >
+                  Copy
+                </button>
+              </div>
+              <pre className="font-mono whitespace-pre-wrap text-gray-300 leading-relaxed max-h-48 overflow-auto">
+                {output}
+              </pre>
             </div>
           )}
         </div>
