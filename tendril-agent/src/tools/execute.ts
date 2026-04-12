@@ -13,7 +13,7 @@ export const executeCode = (workspacePath: string) =>
       args: z.string().optional().describe('Optional JSON string of arguments object passed to the code'),
     }),
     callback: async ({ code, args }) => {
-      const config = readConfig(workspacePath);
+      const { config } = readConfig(workspacePath);
       const parsedArgs = args ? JSON.parse(args) : {};
       return executeDeno(
         code,
