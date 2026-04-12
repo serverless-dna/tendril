@@ -3,6 +3,19 @@ import { createAgent } from './agent.js';
 import { startProtocolLoop, emitUpdate } from './protocol.js';
 import type { ProtocolContext } from './protocol.js';
 
+// Guard stdout — only allow JSON writes. Strands SDK sometimes writes raw text.
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+process.stdout.write = function(chunk: string | Uint8Array, ...args: unknown[]): boolean {
+  const str = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString();
+  const trimmed = str.trim();
+  if (trimmed && !trimmed.startsWith('{')) {
+    // Not JSON — redirect to stderr as diagnostic
+    process.stderr.write(`[stdout-guard] ${trimmed}\n`);
+    return true;
+  }
+  return originalStdoutWrite(chunk, ...(args as [BufferEncoding, () => void]));
+} as typeof process.stdout.write;
+
 // Workspace can be passed as arg or read from ~/.tendril/config.json
 const workspaceArg = process.argv[2] || undefined;
 const { config, workspace: workspacePath } = readConfig(workspaceArg);
@@ -87,11 +100,17 @@ function handleStreamEvent(event: unknown): void {
   const e = event as Record<string, unknown>;
   const type = (e.type as string) ?? e.constructor?.name ?? 'unknown';
 
-  // Log every event for diagnostics
-  process.stderr.write(`[stream] ${type}\n`);
+  // Log event type and keys for diagnostics
+  const keys = Object.keys(e).filter(k => k !== 'constructor');
+  process.stderr.write(`[stream] ${type} keys=${JSON.stringify(keys)}\n`);
+
+  // For modelStreamUpdateEvent, log the actual data structure
+  if (type.includes('modelStream') || type.includes('ModelStream')) {
+    process.stderr.write(`[stream-data] ${JSON.stringify(e, (_, v) => typeof v === 'function' ? '[fn]' : v)}\n`);
+  }
 
   // Text streaming — try multiple field patterns
-  const delta = (e.delta as string) ?? (e.text as string) ?? '';
+  const delta = (e.delta as string) ?? (e.text as string) ?? (e.data as Record<string,unknown>)?.delta as string ?? (e.data as Record<string,unknown>)?.text as string ?? (e.chunk as string) ?? '';
   if (delta && (type.includes('Stream') || type.includes('stream') || type.includes('ContentBlock') || type.includes('content_block'))) {
     emitUpdate({
       sessionUpdate: 'agent_message_chunk',
