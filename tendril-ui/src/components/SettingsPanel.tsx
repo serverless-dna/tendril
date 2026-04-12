@@ -40,6 +40,9 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
           </label>
           <input
             type="text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             value={modelId}
             onChange={(e) => setModelId(e.target.value)}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
@@ -52,6 +55,9 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
           </label>
           <input
             type="text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
@@ -64,6 +70,9 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
           </label>
           <input
             type="text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             value={profile}
             onChange={(e) => setProfile(e.target.value)}
             placeholder="default"

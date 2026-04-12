@@ -35,6 +35,9 @@ export function InputBar({ onSubmit, onCancel, isProcessing }: InputBarProps) {
       <input
         ref={inputRef}
         type="text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}

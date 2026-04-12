@@ -159,6 +159,25 @@ async fn write_to_agent(msg: &Value) -> Result<(), AcpError> {
     write_to_agent_logged(&app, msg).await
 }
 
+pub async fn restart_agent(app: &AppHandle) -> Result<(), AcpError> {
+    eprintln!("[acp] Restarting agent sidecar...");
+
+    // Kill existing process
+    {
+        let mut state = agent_state().lock().await;
+        if let Some(mut agent) = state.take() {
+            let _ = agent.child.kill();
+            eprintln!("[acp] Killed previous agent process");
+        }
+    }
+
+    // Small delay to ensure process is cleaned up
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Reconnect
+    connect_agent(app).await
+}
+
 pub async fn send_prompt(text: &str) -> Result<(), AcpError> {
     let prompt_id = {
         let mut state = agent_state().lock().await;

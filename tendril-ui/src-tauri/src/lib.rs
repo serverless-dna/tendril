@@ -16,6 +16,11 @@ async fn cancel_prompt() -> Result<(), String> {
     acp::send_cancel().await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn restart_agent(app: tauri::AppHandle) -> Result<(), String> {
+    acp::restart_agent(&app).await.map_err(|e| e.to_string())
+}
+
 fn expand_tilde(path: &str) -> String {
     if path.starts_with("~/") || path == "~" {
         if let Some(home) = dirs::home_dir() {
@@ -123,6 +128,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             send_prompt,
             cancel_prompt,
+            restart_agent,
             init_workspace,
             read_capabilities,
             read_config,

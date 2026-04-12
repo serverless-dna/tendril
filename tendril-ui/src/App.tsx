@@ -53,6 +53,8 @@ function AppContent() {
     const merged = deepMerge(config ?? {}, partial as Record<string, unknown>);
     await invoke('write_config', { path: workspacePath, config: merged });
     setConfig(merged);
+    // Restart sidecar so it picks up the new config
+    await invoke('restart_agent');
   };
 
   if (hasWorkspace === null) {
