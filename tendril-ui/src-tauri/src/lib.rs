@@ -132,6 +132,8 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                // Wait for frontend to mount event listeners before starting ACP handshake
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 if let Err(e) = acp::connect_agent(&handle).await {
                     eprintln!("Failed to connect agent: {e}");
                 }

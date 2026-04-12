@@ -48,9 +48,11 @@ function AppContent() {
     setConfig(cfg);
   };
 
-  const handleSaveConfig = async (newConfig: unknown) => {
-    await invoke('write_config', { path: workspacePath, config: newConfig });
-    setConfig(newConfig as Record<string, unknown>);
+  const handleSaveConfig = async (partial: unknown) => {
+    // Merge partial settings with existing config to preserve fields the UI doesn't edit
+    const merged = deepMerge(config ?? {}, partial as Record<string, unknown>);
+    await invoke('write_config', { path: workspacePath, config: merged });
+    setConfig(merged);
   };
 
   if (hasWorkspace === null) {
@@ -115,6 +117,24 @@ function AppContent() {
       </div>
     </div>
   );
+}
+
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] !== null &&
+      typeof source[key] === 'object' &&
+      !Array.isArray(source[key]) &&
+      typeof target[key] === 'object' &&
+      target[key] !== null
+    ) {
+      result[key] = deepMerge(target[key] as Record<string, unknown>, source[key] as Record<string, unknown>);
+    } else if (source[key] !== undefined) {
+      result[key] = source[key];
+    }
+  }
+  return result;
 }
 
 async function getHomePath(): Promise<string> {

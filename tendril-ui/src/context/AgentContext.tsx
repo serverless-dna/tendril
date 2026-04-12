@@ -142,23 +142,33 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for lifecycle events at provider level so we never miss them
   useEffect(() => {
+    let cancelled = false;
     const cleanups: Array<() => void> = [];
 
-    listen<{ stage?: string; error?: string }>('session-lifecycle', (event) => {
-      const stage = event.payload.stage;
-      if (stage === 'connected') {
-        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
-      } else if (stage === 'error' || stage === 'auth_failed') {
-        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
-        dispatch({ type: 'SET_ERROR', error: event.payload.error ?? 'Connection failed' });
-      }
-    }).then((fn) => cleanups.push(fn));
+    const setup = async () => {
+      const unlistenLifecycle = await listen('session-lifecycle', (event: { payload: unknown }) => {
+        console.log('[AgentProvider] session-lifecycle payload:', JSON.stringify(event.payload));
+        const payload = event.payload as Record<string, unknown>;
+        const stage = payload.stage as string | undefined;
+        if (stage === 'connected') {
+          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+        } else if (stage === 'error' || stage === 'auth_failed') {
+          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+          dispatch({ type: 'SET_ERROR', error: (payload.error as string) ?? 'Connection failed' });
+        }
+      });
+      if (!cancelled) cleanups.push(unlistenLifecycle);
 
-    listen<{ message?: string }>('agent-error', (event) => {
-      dispatch({ type: 'SET_ERROR', error: event.payload.message ?? 'Unknown error' });
-    }).then((fn) => cleanups.push(fn));
+      const unlistenError = await listen('agent-error', (event: { payload: unknown }) => {
+        console.log('[AgentProvider] agent-error payload:', JSON.stringify(event.payload));
+        const payload = event.payload as Record<string, unknown>;
+        dispatch({ type: 'SET_ERROR', error: (payload.message as string) ?? 'Unknown error' });
+      });
+      if (!cancelled) cleanups.push(unlistenError);
+    };
 
-    return () => cleanups.forEach((fn) => fn());
+    setup();
+    return () => { cancelled = true; cleanups.forEach((fn) => fn()); };
   }, []);
 
   return <AgentContext.Provider value={{ state, dispatch }}>{children}</AgentContext.Provider>;
