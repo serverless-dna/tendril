@@ -208,6 +208,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 
       const unlistenComplete = await listen('prompt-complete', () => {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+        dispatch({ type: 'PROMPT_COMPLETE' });
       });
       if (!cancelled) cleanups.push(unlistenComplete);
     };
