@@ -32,6 +32,7 @@ const agent = createAgent(config, workspacePath);
 let turnStartTime = 0;
 let turnToolCallCounter = 0;
 let lastUsage: { inputTokens: number; outputTokens: number } | null = null;
+let lastToolCallId: string = '';
 
 const ctx: ProtocolContext = {
   sessionId: null,
@@ -133,9 +134,10 @@ function handleStreamEvent(event: unknown): void {
   if (type === 'beforeToolCallEvent') {
     turnToolCallCounter++;
     const toolUse = (e.toolUse as Record<string, unknown>) ?? e;
+    lastToolCallId = (toolUse.toolUseId as string) ?? `tool-${turnToolCallCounter}`;
     emitUpdate({
       sessionUpdate: 'tool_call',
-      toolCallId: (toolUse.toolUseId as string) ?? `tool-${turnToolCallCounter}`,
+      toolCallId: lastToolCallId,
       title: (toolUse.name as string) ?? 'unknown',
       kind: (toolUse.name as string) === 'execute' ? 'execute' : 'other',
       input: toolUse.input ?? {},
@@ -143,13 +145,15 @@ function handleStreamEvent(event: unknown): void {
     return;
   }
 
-  // Tool result — toolResultEvent
-  if (type === 'toolResultEvent') {
+  // Tool result — toolResultEvent / afterToolCallEvent
+  if (type === 'toolResultEvent' || type === 'afterToolCallEvent') {
+    const result = (e.result as Record<string, unknown>) ?? e;
+    const rawOutput = result.content ?? result.result ?? result.text ?? '';
     emitUpdate({
       sessionUpdate: 'tool_call_update',
-      toolCallId: (e.toolUseId as string) ?? `tool-${turnToolCallCounter}`,
+      toolCallId: lastToolCallId || `tool-${turnToolCallCounter}`,
       status: 'completed',
-      rawOutput: typeof e.result === 'string' ? e.result : JSON.stringify(e.result),
+      rawOutput: typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput),
       title: (e.name as string) ?? 'unknown',
     });
     return;
