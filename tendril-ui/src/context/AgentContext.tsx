@@ -154,32 +154,33 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(agentReducer, initialState);
   const [debugLog, setDebugLog] = useState<DebugEntry[]>([]);
   const debugCounterRef = useRef(0);
+  const assistantStartedRef = useRef(false);
 
-  // Listen for ALL events at provider level so we never miss them
+  // Single place for ALL Tauri event listeners — components just read state
   useEffect(() => {
     let cancelled = false;
     const cleanups: Array<() => void> = [];
 
-    // Debug event collector — always active
-    listen<{ direction: string; message: unknown; timestamp?: string }>(
-      'agent-debug',
-      (event) => {
-        debugCounterRef.current += 1;
-        setDebugLog((prev) => [
-          ...prev.slice(-500),
-          {
-            id: debugCounterRef.current,
-            direction: event.payload.direction,
-            message: event.payload.message,
-            timestamp: event.payload.timestamp,
-          },
-        ]);
-      },
-    ).then((fn) => { if (!cancelled) cleanups.push(fn); });
-
     const setup = async () => {
-      const unlistenLifecycle = await listen('session-lifecycle', (event: { payload: unknown }) => {
-        console.log('[AgentProvider] session-lifecycle payload:', JSON.stringify(event.payload));
+      // Debug log collector
+      cleanups.push(await listen<{ direction: string; message: unknown; timestamp?: string }>(
+        'agent-debug',
+        (event) => {
+          debugCounterRef.current += 1;
+          setDebugLog((prev) => [
+            ...prev.slice(-500),
+            {
+              id: debugCounterRef.current,
+              direction: event.payload.direction,
+              message: event.payload.message,
+              timestamp: event.payload.timestamp,
+            },
+          ]);
+        },
+      ));
+
+      // Session lifecycle
+      cleanups.push(await listen('session-lifecycle', (event: { payload: unknown }) => {
         const payload = event.payload as Record<string, unknown>;
         const stage = payload.stage as string | undefined;
         if (stage === 'connected') {
@@ -188,32 +189,76 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
           dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
           dispatch({ type: 'SET_ERROR', error: (payload.error as string) ?? 'Connection failed' });
         }
-      });
-      if (!cancelled) cleanups.push(unlistenLifecycle);
+      }));
 
-      const unlistenError = await listen('agent-error', (event: { payload: unknown }) => {
-        console.log('[AgentProvider] agent-error payload:', JSON.stringify(event.payload));
+      // Agent errors
+      cleanups.push(await listen('agent-error', (event: { payload: unknown }) => {
         const payload = event.payload as Record<string, unknown>;
-        // If we're getting errors from the agent, it's connected (error is from inference, not handshake)
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
         dispatch({ type: 'SET_ERROR', error: (payload.message as string) ?? 'Unknown error' });
-      });
-      if (!cancelled) cleanups.push(unlistenError);
+      }));
 
-      // Also listen to any agent-originated event as proof of connection
-      const unlistenChunk = await listen('agent-message-chunk', () => {
+      // Streamed text chunks
+      cleanups.push(await listen<{ text: string }>('agent-message-chunk', (event) => {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
-      });
-      if (!cancelled) cleanups.push(unlistenChunk);
+        if (!assistantStartedRef.current) {
+          dispatch({ type: 'START_ASSISTANT_MESSAGE' });
+          assistantStartedRef.current = true;
+        }
+        dispatch({ type: 'APPEND_TEXT', text: event.payload.text });
+      }));
 
-      const unlistenComplete = await listen('prompt-complete', () => {
+      // Tool call announced
+      cleanups.push(await listen<{ toolCallId: string; title: string; kind: string; input: Record<string, unknown> }>(
+        'tool-call',
+        (event) => {
+          if (!assistantStartedRef.current) {
+            dispatch({ type: 'START_ASSISTANT_MESSAGE' });
+            assistantStartedRef.current = true;
+          }
+          dispatch({ type: 'ADD_TOOL_CALL', toolCall: { ...event.payload, status: 'pending' } });
+        },
+      ));
+
+      // Tool call completed
+      cleanups.push(await listen<{ toolCallId: string; status: string; rawOutput?: string }>(
+        'tool-call-update',
+        (event) => {
+          dispatch({
+            type: 'UPDATE_TOOL_CALL',
+            toolCallId: event.payload.toolCallId,
+            status: event.payload.status,
+            output: event.payload.rawOutput,
+          });
+        },
+      ));
+
+      // Token usage
+      cleanups.push(await listen<{ cost: number; input_tokens: number; output_tokens: number; total_tokens: number; duration_ms: number }>(
+        'query-result',
+        (event) => {
+          dispatch({
+            type: 'SET_USAGE',
+            usage: {
+              inputTokens: event.payload.input_tokens,
+              outputTokens: event.payload.output_tokens,
+              totalTokens: event.payload.total_tokens,
+              cost: event.payload.cost,
+              durationMs: event.payload.duration_ms,
+            },
+          });
+        },
+      ));
+
+      // Prompt complete — turn finished
+      cleanups.push(await listen('prompt-complete', () => {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
         dispatch({ type: 'PROMPT_COMPLETE' });
-      });
-      if (!cancelled) cleanups.push(unlistenComplete);
+        assistantStartedRef.current = false;
+      }));
     };
 
-    setup();
+    if (!cancelled) setup();
     return () => { cancelled = true; cleanups.forEach((fn) => fn()); };
   }, []);
 
