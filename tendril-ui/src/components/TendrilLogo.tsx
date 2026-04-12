@@ -1,22 +1,26 @@
 import React from 'react';
 
-// 16x16 pixel art — small body, tendrils radiating all sides, no eyes
+// 16x20 pixel art — tiny body, long tendrils, sparse
 const pixels = [
-  '....P...P...P...',
-  '...P.P.P.P.P.P..',
-  '..P..P...P..P...',
-  '..P..PPPPP..P...',
-  '.P..PPPPPPP..P..',
-  '.P.PPPPPPPPP.P..',
-  'P..PPPPPPPPP..P.',
-  '...PPPPPPPPP....',
-  'P..PPPPPPPPP..P.',
-  '.P.PPPPPPPPP.P..',
-  '.P..PPPPPPP..P..',
-  '..P..PPPPP..P...',
-  '..P..P...P..P...',
-  '...P.P.P.P.P....',
-  '....P...P...P...',
+  '....P.....P.....',
+  '...P.....P......',
+  '....P...P.......',
+  '.....PPP........',
+  '....PPPPP.......',
+  '....PPPPP.......',
+  '.....PPP........',
+  '...P.P.P.P......',
+  '..P..P.P..P.....',
+  '.P...P.P...P....',
+  'P....P.P....P...',
+  '.....P.P........',
+  '.....P.P........',
+  '....P...P.......',
+  '...P.....P......',
+  '..P.......P.....',
+  '.P.........P....',
+  'P...........P...',
+  '................',
   '................',
 ];
 
