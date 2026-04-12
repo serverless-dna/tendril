@@ -25,6 +25,11 @@ async fn cancel_prompt() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn connect_agent_cmd(app: tauri::AppHandle) -> Result<(), String> {
+    acp::connect_agent(&app).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn restart_agent(app: tauri::AppHandle) -> Result<(), String> {
     acp::restart_agent(&app).await.map_err(|e| e.to_string())
 }
@@ -197,6 +202,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             send_prompt,
             cancel_prompt,
+            connect_agent_cmd,
             restart_agent,
             init_workspace,
             read_capabilities,
@@ -205,23 +211,9 @@ pub fn run() {
             write_config,
             get_system_prompt,
         ])
-        .setup(|app| {
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                // Wait for frontend to mount event listeners
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                // Only connect agent if workspace is configured
-                match read_app_config_inner() {
-                    Ok(config) if config.get("workspace").and_then(|w| w.as_str()).is_some() => {
-                        if let Err(e) = acp::connect_agent(&handle).await {
-                            eprintln!("Failed to connect agent: {e}");
-                        }
-                    }
-                    _ => {
-                        eprintln!("[acp] No workspace configured — skipping agent spawn");
-                    }
-                }
-            });
+        .setup(|_app| {
+            // Agent connection is initiated by the frontend via connect_agent_cmd
+            // after event listeners are mounted and workspace is confirmed
             Ok(())
         })
         .run(tauri::generate_context!())

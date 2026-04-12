@@ -34,6 +34,8 @@ function AppContent() {
         setHasWorkspace(true);
         const prompt = await invoke<string>('get_system_prompt');
         setSystemPrompt(prompt);
+        // Connect agent — listeners are mounted via AgentProvider already
+        await invoke('connect_agent_cmd');
       } else {
         setHasWorkspace(false);
       }
@@ -51,7 +53,7 @@ function AppContent() {
     setConfig(cfg);
     setHasWorkspace(true);
     // Start the agent now that workspace is configured
-    await invoke('restart_agent');
+    await invoke('connect_agent_cmd');
   };
 
   const handleSaveConfig = async (partial: unknown) => {
