@@ -53,6 +53,22 @@ export function DebugPanel() {
             Auto-scroll
           </label>
           <span className="text-xs text-gray-600">{debugLog.length} messages</span>
+          <button
+            onClick={() => {
+              const text = debugLog.map((entry) => {
+                const ts = formatTimestamp(entry.timestamp);
+                const dir = entry.direction;
+                const msg = typeof entry.message === 'string'
+                  ? entry.message
+                  : JSON.stringify(entry.message, null, 2);
+                return `${ts} [${dir}]\n${msg}`;
+              }).join('\n\n');
+              navigator.clipboard.writeText(text);
+            }}
+            className="text-xs text-gray-500 hover:text-gray-300"
+          >
+            Copy All
+          </button>
         </div>
       </div>
 
