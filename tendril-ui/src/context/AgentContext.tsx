@@ -1,5 +1,10 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
+
+let msgCounter = 0;
+function nextMsgId(): string {
+  return `msg-${Date.now()}-${++msgCounter}`;
+}
 
 export interface Message {
   id: string;
@@ -52,7 +57,7 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
         ...state,
         messages: [
           ...state.messages,
-          { id: `msg-${Date.now()}`, role: 'user', text: action.text, toolCalls: [] },
+          { id: nextMsgId(), role: 'user', text: action.text, toolCalls: [] },
         ],
         isProcessing: true,
         error: null,
@@ -63,7 +68,7 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
         ...state,
         messages: [
           ...state.messages,
-          { id: `msg-${Date.now()}`, role: 'assistant', text: '', toolCalls: [] },
+          { id: nextMsgId(), role: 'assistant', text: '', toolCalls: [] },
         ],
       };
 
@@ -162,9 +167,22 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
       const unlistenError = await listen('agent-error', (event: { payload: unknown }) => {
         console.log('[AgentProvider] agent-error payload:', JSON.stringify(event.payload));
         const payload = event.payload as Record<string, unknown>;
+        // If we're getting errors from the agent, it's connected (error is from inference, not handshake)
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
         dispatch({ type: 'SET_ERROR', error: (payload.message as string) ?? 'Unknown error' });
       });
       if (!cancelled) cleanups.push(unlistenError);
+
+      // Also listen to any agent-originated event as proof of connection
+      const unlistenChunk = await listen('agent-message-chunk', () => {
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+      });
+      if (!cancelled) cleanups.push(unlistenChunk);
+
+      const unlistenComplete = await listen('prompt-complete', () => {
+        dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+      });
+      if (!cancelled) cleanups.push(unlistenComplete);
     };
 
     setup();
