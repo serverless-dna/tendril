@@ -10,8 +10,6 @@ import { useCapabilities } from './hooks/useCapabilities';
 
 type Tab = 'chat' | 'capabilities' | 'settings' | 'debug';
 
-const WORKSPACE_PATH = '~/tendril-workspace'.replace('~', '/Users'); // Resolved at runtime
-
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('chat');
   const [hasWorkspace, setHasWorkspace] = useState<boolean | null>(null);
@@ -21,21 +19,26 @@ function AppContent() {
   const { capabilities, loading: capsLoading, refresh: refreshCaps } = useCapabilities(workspacePath);
 
   useEffect(() => {
-    checkWorkspace();
+    loadAppConfig();
   }, []);
 
-  const checkWorkspace = async () => {
+  const loadAppConfig = async () => {
     try {
-      // Try common default path
-      const home = await getHomePath();
-      const path = `${home}/tendril-workspace`;
-      setWorkspacePath(path);
-      const cfg = await invoke<Record<string, unknown>>('read_config', { path });
-      setConfig(cfg);
-      setHasWorkspace(true);
-      const prompt = await invoke<string>('get_system_prompt');
-      setSystemPrompt(prompt);
+      // Read from ~/.tendril/config.json
+      const cfg = await invoke<Record<string, unknown>>('read_config');
+      const workspace = cfg.workspace as string | null;
+
+      if (workspace) {
+        setWorkspacePath(workspace);
+        setConfig(cfg);
+        setHasWorkspace(true);
+        const prompt = await invoke<string>('get_system_prompt');
+        setSystemPrompt(prompt);
+      } else {
+        setHasWorkspace(false);
+      }
     } catch {
+      // No config file — first run
       setHasWorkspace(false);
     }
   };
@@ -43,15 +46,17 @@ function AppContent() {
   const handleInit = async (path: string) => {
     await invoke('init_workspace', { path });
     setWorkspacePath(path);
-    setHasWorkspace(true);
-    const cfg = await invoke<Record<string, unknown>>('read_config', { path });
+    // Reload config (init_workspace writes to ~/.tendril/config.json)
+    const cfg = await invoke<Record<string, unknown>>('read_config');
     setConfig(cfg);
+    setHasWorkspace(true);
+    // Start the agent now that workspace is configured
+    await invoke('restart_agent');
   };
 
   const handleSaveConfig = async (partial: unknown) => {
-    // Merge partial settings with existing config to preserve fields the UI doesn't edit
     const merged = deepMerge(config ?? {}, partial as Record<string, unknown>);
-    await invoke('write_config', { path: workspacePath, config: merged });
+    await invoke('write_config', { config: merged });
     setConfig(merged);
     // Restart sidecar so it picks up the new config
     await invoke('restart_agent');
@@ -59,7 +64,7 @@ function AppContent() {
 
   if (hasWorkspace === null) {
     return (
-      <div className="flex items-center justify-center h-screen text-gray-500">
+      <div className="flex items-center justify-center h-screen bg-gray-950 text-gray-500">
         Loading...
       </div>
     );
@@ -137,16 +142,6 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
     }
   }
   return result;
-}
-
-async function getHomePath(): Promise<string> {
-  // In Tauri, we can use the home dir from the OS
-  try {
-    const { homeDir } = await import('@tauri-apps/api/path');
-    return await homeDir();
-  } catch {
-    return '/tmp';
-  }
 }
 
 export default function App() {

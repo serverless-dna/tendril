@@ -3,8 +3,16 @@ import { createAgent } from './agent.js';
 import { startProtocolLoop, emitUpdate } from './protocol.js';
 import type { ProtocolContext, } from './protocol.js';
 
-const workspacePath = process.argv[2] ?? process.cwd();
-const config = readConfig(workspacePath);
+// Workspace can be passed as arg or read from ~/.tendril/config.json
+const workspaceArg = process.argv[2] || undefined;
+const { config, workspace: workspacePath } = readConfig(workspaceArg);
+
+process.stderr.write(`[tendril-agent] workspace: ${workspacePath}\n`);
+process.stderr.write(`[tendril-agent] model: ${config.model.modelId} (${config.model.region})\n`);
+if (config.model.profile) {
+  process.stderr.write(`[tendril-agent] AWS profile: ${config.model.profile}\n`);
+}
+
 const agent = createAgent(config, workspacePath);
 
 let turnStartTime = 0;

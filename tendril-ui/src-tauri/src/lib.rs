@@ -3,11 +3,19 @@ mod events;
 
 use serde_json::Value;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// App-level config lives at ~/.tendril/config.json
+fn app_config_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".tendril")
+        .join("config.json")
+}
 
 #[tauri::command]
 async fn send_prompt(text: String, app: tauri::AppHandle) -> Result<(), String> {
-    let _ = &app; // ensure app handle kept alive
+    let _ = &app;
     acp::send_prompt(&text).await.map_err(|e| e.to_string())
 }
 
@@ -30,46 +38,33 @@ fn expand_tilde(path: &str) -> String {
     path.to_string()
 }
 
+/// Initialize workspace directory structure + save to app config
 #[tauri::command]
 async fn init_workspace(path: String) -> Result<(), String> {
     let expanded = expand_tilde(&path);
     let workspace = Path::new(&expanded);
 
-    // Create directory structure
+    // Create workspace structure
     fs::create_dir_all(workspace.join("tools")).map_err(|e| e.to_string())?;
-    fs::create_dir_all(workspace.join(".tendril")).map_err(|e| e.to_string())?;
 
     // Write empty registry
-    fs::write(
-        workspace.join("index.json"),
-        serde_json::to_string_pretty(&serde_json::json!({
-            "version": "1.0.0",
-            "capabilities": []
-        }))
-        .unwrap(),
-    )
-    .map_err(|e| e.to_string())?;
+    if !workspace.join("index.json").exists() {
+        fs::write(
+            workspace.join("index.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "1.0.0",
+                "capabilities": []
+            }))
+            .unwrap(),
+        )
+        .map_err(|e| e.to_string())?;
+    }
 
-    // Write default config
-    fs::write(
-        workspace.join(".tendril").join("config.json"),
-        serde_json::to_string_pretty(&serde_json::json!({
-            "model": {
-                "provider": "bedrock",
-                "modelId": "us.anthropic.claude-sonnet-4-5-20250514",
-                "region": "us-east-1"
-            },
-            "sandbox": {
-                "denoPath": "deno",
-                "timeoutMs": 45000,
-                "allowedDomains": ["esm.sh", "deno.land", "cdn.jsdelivr.net"]
-            },
-            "registry": { "maxCapabilities": 500 },
-            "agent": { "maxTurns": 100 }
-        }))
-        .unwrap(),
-    )
-    .map_err(|e| e.to_string())?;
+    // Read existing app config or create default, then set workspace path
+    let mut config = read_app_config_inner().unwrap_or_else(|_| default_app_config());
+    config["workspace"] = serde_json::json!(expanded);
+
+    write_app_config_inner(&config)?;
 
     Ok(())
 }
@@ -91,33 +86,58 @@ async fn read_capabilities(path: String) -> Result<Vec<Value>, String> {
     Ok(caps)
 }
 
+/// Read app config from ~/.tendril/config.json
 #[tauri::command]
-async fn read_config(path: String) -> Result<Value, String> {
-    let expanded = expand_tilde(&path);
-    let config_path = Path::new(&expanded).join(".tendril").join("config.json");
-    if !config_path.exists() {
-        return Err("Config not found".to_string());
-    }
-    let content = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&content).map_err(|e| e.to_string())
+async fn read_config() -> Result<Value, String> {
+    read_app_config_inner()
 }
 
+/// Write app config to ~/.tendril/config.json
 #[tauri::command]
-async fn write_config(path: String, config: Value) -> Result<(), String> {
-    let expanded = expand_tilde(&path);
-    let config_path = Path::new(&expanded).join(".tendril").join("config.json");
-    fs::create_dir_all(Path::new(&expanded).join(".tendril")).map_err(|e| e.to_string())?;
-    fs::write(
-        &config_path,
-        serde_json::to_string_pretty(&config).unwrap(),
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
+async fn write_config(config: Value) -> Result<(), String> {
+    write_app_config_inner(&config)
 }
 
 #[tauri::command]
 async fn get_system_prompt() -> Result<String, String> {
     Ok("System prompt is assembled by the agent at runtime from the workspace configuration. See tendril-agent/src/prompt.ts for the template.".to_string())
+}
+
+fn default_app_config() -> Value {
+    serde_json::json!({
+        "workspace": null,
+        "model": {
+            "provider": "bedrock",
+            "modelId": "us.anthropic.claude-sonnet-4-5-20250514",
+            "region": "us-east-1",
+            "profile": null
+        },
+        "sandbox": {
+            "denoPath": "deno",
+            "timeoutMs": 45000,
+            "allowedDomains": ["esm.sh", "deno.land", "cdn.jsdelivr.net"]
+        },
+        "registry": { "maxCapabilities": 500 },
+        "agent": { "maxTurns": 100 }
+    })
+}
+
+fn read_app_config_inner() -> Result<Value, String> {
+    let path = app_config_path();
+    if !path.exists() {
+        return Err("Config not found".to_string());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+
+fn write_app_config_inner(config: &Value) -> Result<(), String> {
+    let path = app_config_path();
+    fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::write(&path, serde_json::to_string_pretty(config).unwrap())
+        .map_err(|e| e.to_string())?;
+    eprintln!("[config] Saved to {}", path.display());
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -138,10 +158,18 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                // Wait for frontend to mount event listeners before starting ACP handshake
+                // Wait for frontend to mount event listeners
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                if let Err(e) = acp::connect_agent(&handle).await {
-                    eprintln!("Failed to connect agent: {e}");
+                // Only connect agent if workspace is configured
+                match read_app_config_inner() {
+                    Ok(config) if config.get("workspace").and_then(|w| w.as_str()).is_some() => {
+                        if let Err(e) = acp::connect_agent(&handle).await {
+                            eprintln!("Failed to connect agent: {e}");
+                        }
+                    }
+                    _ => {
+                        eprintln!("[acp] No workspace configured — skipping agent spawn");
+                    }
                 }
             });
             Ok(())

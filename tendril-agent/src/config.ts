@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import type { WorkspaceConfig } from './types.js';
 
 const DEFAULTS: WorkspaceConfig = {
@@ -22,32 +23,44 @@ const DEFAULTS: WorkspaceConfig = {
   },
 };
 
-export function readConfig(workspacePath: string): WorkspaceConfig {
-  const configPath = path.join(workspacePath, '.tendril', 'config.json');
+/** App config path: ~/.tendril/config.json */
+function appConfigPath(): string {
+  return path.join(os.homedir(), '.tendril', 'config.json');
+}
 
-  if (!fs.existsSync(configPath)) {
-    return { ...DEFAULTS };
+/**
+ * Read config from ~/.tendril/config.json.
+ * Returns the config and the workspace path.
+ */
+export function readConfig(workspaceOverride?: string): { config: WorkspaceConfig; workspace: string } {
+  const configPath = appConfigPath();
+
+  let raw: Record<string, unknown> = {};
+  if (fs.existsSync(configPath)) {
+    raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   }
 
-  const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  const workspace = workspaceOverride
+    ?? (raw.workspace as string | undefined)
+    ?? path.join(os.homedir(), 'tendril-workspace');
 
   const config: WorkspaceConfig = {
     model: {
-      provider: raw.model?.provider ?? DEFAULTS.model.provider,
-      modelId: raw.model?.modelId ?? DEFAULTS.model.modelId,
-      region: raw.model?.region ?? DEFAULTS.model.region,
-      profile: raw.model?.profile ?? DEFAULTS.model.profile,
+      provider: (raw.model as Record<string, unknown>)?.provider as string ?? DEFAULTS.model.provider,
+      modelId: (raw.model as Record<string, unknown>)?.modelId as string ?? DEFAULTS.model.modelId,
+      region: (raw.model as Record<string, unknown>)?.region as string ?? DEFAULTS.model.region,
+      profile: (raw.model as Record<string, unknown>)?.profile as string | undefined ?? DEFAULTS.model.profile,
     },
     sandbox: {
-      denoPath: raw.sandbox?.denoPath ?? DEFAULTS.sandbox.denoPath,
-      timeoutMs: raw.sandbox?.timeoutMs ?? DEFAULTS.sandbox.timeoutMs,
-      allowedDomains: raw.sandbox?.allowedDomains ?? DEFAULTS.sandbox.allowedDomains,
+      denoPath: (raw.sandbox as Record<string, unknown>)?.denoPath as string ?? DEFAULTS.sandbox.denoPath,
+      timeoutMs: (raw.sandbox as Record<string, unknown>)?.timeoutMs as number ?? DEFAULTS.sandbox.timeoutMs,
+      allowedDomains: (raw.sandbox as Record<string, unknown>)?.allowedDomains as string[] ?? DEFAULTS.sandbox.allowedDomains,
     },
     registry: {
-      maxCapabilities: raw.registry?.maxCapabilities ?? DEFAULTS.registry.maxCapabilities,
+      maxCapabilities: (raw.registry as Record<string, unknown>)?.maxCapabilities as number ?? DEFAULTS.registry.maxCapabilities,
     },
     agent: {
-      maxTurns: raw.agent?.maxTurns ?? DEFAULTS.agent.maxTurns,
+      maxTurns: (raw.agent as Record<string, unknown>)?.maxTurns as number ?? DEFAULTS.agent.maxTurns,
     },
   };
 
@@ -58,5 +71,5 @@ export function readConfig(workspacePath: string): WorkspaceConfig {
     throw new Error('Config validation failed: model.region is required');
   }
 
-  return config;
+  return { config, workspace };
 }

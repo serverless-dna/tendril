@@ -117,15 +117,25 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
     // Brief delay to allow initialize response
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
+    // Read workspace path from app config
+    let workspace = crate::read_app_config_inner()
+        .ok()
+        .and_then(|c| c.get("workspace").and_then(|w| w.as_str()).map(|s| s.to_string()))
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .map(|h| h.join("tendril-workspace").to_string_lossy().to_string())
+                .unwrap_or_else(|| "/tmp/tendril-workspace".to_string())
+        });
+
+    eprintln!("[acp] Workspace: {workspace}");
+
     // Send new_session
     let session_msg = json!({
         "jsonrpc": "2.0",
         "id": "session-1",
         "method": "new_session",
         "params": {
-            "workingDirectory": dirs::home_dir()
-                .map(|h| h.join("tendril-workspace").to_string_lossy().to_string())
-                .unwrap_or_else(|| "/tmp/tendril-workspace".to_string())
+            "workingDirectory": workspace
         }
     });
     write_to_agent_logged(app, &session_msg).await?;
