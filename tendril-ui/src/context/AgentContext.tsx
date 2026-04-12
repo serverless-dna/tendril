@@ -162,50 +162,64 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     const cleanups: Array<() => void> = [];
 
     const setup = async () => {
-      // Debug log collector — collapses consecutive agent_message_chunk into one entry
+      // Debug log collector
+      // - Collapses all agent_message_chunk events into one growing entry
+      // - Filters out stdout-guard stderr noise (redundant with chunk events)
       cleanups.push(await listen<{ direction: string; message: unknown; timestamp?: string }>(
         'agent-debug',
         (event) => {
+          // Filter out stdout-guard noise
+          if (event.payload.direction === 'agent-stderr') {
+            const text = typeof event.payload.message === 'string' ? event.payload.message : '';
+            if (text.includes('[stdout-guard]')) return;
+          }
+
           const msg = event.payload.message as Record<string, unknown> | undefined;
-          const isChunk = msg?.method === 'session/update'
-            && (msg?.params as Record<string, unknown>)?.update
-            && ((msg?.params as Record<string, unknown>)?.update as Record<string, unknown>)?.sessionUpdate === 'agent_message_chunk';
+          const update = (msg?.params as Record<string, unknown>)?.update as Record<string, unknown> | undefined;
+          const isChunk = msg?.method === 'session/update' && update?.sessionUpdate === 'agent_message_chunk';
 
           setDebugLog((prev) => {
-            if (isChunk && prev.length > 0) {
-              const last = prev[prev.length - 1];
-              if (last.direction === 'agent→host' && (last as { _isChunkGroup?: boolean })._isChunkGroup) {
-                // Append to existing chunk group
-                const text = ((msg?.params as Record<string, unknown>)?.update as Record<string, unknown>)?.text as string ?? '';
-                const updated = { ...last, message: (last.message as string) + text, timestamp: event.payload.timestamp };
-                return [...prev.slice(0, -1), updated];
-              }
-            }
-
-            debugCounterRef.current += 1;
-
             if (isChunk) {
-              const text = ((msg?.params as Record<string, unknown>)?.update as Record<string, unknown>)?.text as string ?? '';
+              const text = (update?.text as string) ?? '';
+              // Find last chunk group in the array (may not be the last entry)
+              const lastChunkIdx = prev.findLastIndex((e) => (e as { _isChunkGroup?: boolean })._isChunkGroup);
+              if (lastChunkIdx >= 0) {
+                const existing = prev[lastChunkIdx];
+                const updated = { ...existing, message: (existing.message as string) + text, timestamp: event.payload.timestamp };
+                const next = [...prev];
+                next[lastChunkIdx] = updated;
+                return next;
+              }
+              // Start new chunk group
+              debugCounterRef.current += 1;
               return [
                 ...prev.slice(-500),
-                {
-                  id: debugCounterRef.current,
-                  direction: 'agent→host',
-                  message: `📝 streaming: ${text}`,
-                  timestamp: event.payload.timestamp,
-                  _isChunkGroup: true,
-                } as DebugEntry & { _isChunkGroup: boolean },
+                { id: debugCounterRef.current, direction: 'agent→host', message: text, timestamp: event.payload.timestamp, _isChunkGroup: true } as DebugEntry & { _isChunkGroup: boolean },
               ];
             }
 
+            // Non-chunk event — if there's an active chunk group, close it by clearing the flag
+            // Actually, we want chunks from one turn to merge. Reset on prompt_complete.
+            if (update?.sessionUpdate === 'prompt_complete') {
+              // Mark all chunk groups as closed by removing flag
+              const closed = prev.map((e) => {
+                if ((e as { _isChunkGroup?: boolean })._isChunkGroup) {
+                  const { _isChunkGroup: _, ...rest } = e as DebugEntry & { _isChunkGroup: boolean };
+                  return { ...rest, message: `📝 ${rest.message}` };
+                }
+                return e;
+              });
+              debugCounterRef.current += 1;
+              return [
+                ...closed.slice(-500),
+                { id: debugCounterRef.current, direction: event.payload.direction, message: event.payload.message, timestamp: event.payload.timestamp },
+              ];
+            }
+
+            debugCounterRef.current += 1;
             return [
               ...prev.slice(-500),
-              {
-                id: debugCounterRef.current,
-                direction: event.payload.direction,
-                message: event.payload.message,
-                timestamp: event.payload.timestamp,
-              },
+              { id: debugCounterRef.current, direction: event.payload.direction, message: event.payload.message, timestamp: event.payload.timestamp },
             ];
           });
         },
