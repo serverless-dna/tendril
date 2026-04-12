@@ -21,7 +21,7 @@ export async function executeDeno(
         'run',
         `--allow-read=${workspacePath}`,
         `--allow-write=${workspacePath}`,
-        '--allow-net=esm.sh,deno.land,cdn.jsdelivr.net',
+        '--allow-net',
         '--no-prompt',
         '--quiet',
         tmpFile,

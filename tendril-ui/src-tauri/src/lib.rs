@@ -131,7 +131,7 @@ WHEN WRITING TOOL IMPLEMENTATIONS:
 
 SANDBOX:
 - Read/write scoped to {workspace}
-- fetch() available, scoped to allowed domains
+- fetch() available for any URL — use it to access APIs, web pages, etc.
 - No shell access, no process spawning
 
 RULES:
