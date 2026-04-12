@@ -8,10 +8,11 @@ import { WorkspaceSetup } from './components/WorkspaceSetup';
 import { DebugPanel } from './components/DebugPanel';
 import { useCapabilities } from './hooks/useCapabilities';
 
-type Tab = 'chat' | 'capabilities' | 'settings' | 'debug';
+type Tab = 'chat' | 'capabilities' | 'settings';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('chat');
+  const [debugOpen, setDebugOpen] = useState(false);
   const [hasWorkspace, setHasWorkspace] = useState<boolean | null>(null);
   const [workspacePath, setWorkspacePath] = useState('');
   const [config, setConfig] = useState<Record<string, unknown> | null>(null);
@@ -24,7 +25,6 @@ function AppContent() {
 
   const loadAppConfig = async () => {
     try {
-      // Read from ~/.tendril/config.json
       const cfg = await invoke<Record<string, unknown>>('read_config');
       const workspace = cfg.workspace as string | null;
 
@@ -34,13 +34,11 @@ function AppContent() {
         setHasWorkspace(true);
         const prompt = await invoke<string>('get_system_prompt');
         setSystemPrompt(prompt);
-        // Connect agent — listeners are mounted via AgentProvider already
         await invoke('connect_agent_cmd');
       } else {
         setHasWorkspace(false);
       }
     } catch {
-      // No config file — first run
       setHasWorkspace(false);
     }
   };
@@ -48,11 +46,9 @@ function AppContent() {
   const handleInit = async (path: string) => {
     await invoke('init_workspace', { path });
     setWorkspacePath(path);
-    // Reload config (init_workspace writes to ~/.tendril/config.json)
     const cfg = await invoke<Record<string, unknown>>('read_config');
     setConfig(cfg);
     setHasWorkspace(true);
-    // Start the agent now that workspace is configured
     await invoke('connect_agent_cmd');
   };
 
@@ -60,7 +56,6 @@ function AppContent() {
     const merged = deepMerge(config ?? {}, partial as Record<string, unknown>);
     await invoke('write_config', { config: merged });
     setConfig(merged);
-    // Restart sidecar so it picks up the new config
     await invoke('restart_agent');
   };
 
@@ -80,50 +75,71 @@ function AppContent() {
     { id: 'chat', label: 'Chat' },
     { id: 'capabilities', label: 'Capabilities' },
     { id: 'settings', label: 'Settings' },
-    { id: 'debug', label: 'Debug' },
   ];
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-gray-950">
       {/* Tab bar */}
-      <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => {
-              setActiveTab(tab.id);
-              if (tab.id === 'capabilities') refreshCaps();
-            }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${
-              activeTab === tab.id
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (tab.id === 'capabilities') refreshCaps();
+              }}
+              className={`px-4 py-2 text-sm font-medium border-b-2 ${
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setDebugOpen(!debugOpen)}
+          className={`px-3 py-2 text-xs font-mono ${
+            debugOpen
+              ? 'text-green-400'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+          title="Toggle debug panel"
+        >
+          {debugOpen ? '⟩ Debug' : '⟨ Debug'}
+        </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {activeTab === 'chat' && <ChatView />}
-        {activeTab === 'capabilities' && (
-          <CapabilityBrowser
-            capabilities={capabilities as never[]}
-            loading={capsLoading}
-            onRefresh={refreshCaps}
-            workspacePath={workspacePath}
-          />
+      {/* Content + Debug side panel */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main content */}
+        <div className="flex-1 overflow-hidden">
+          {activeTab === 'chat' && <ChatView />}
+          {activeTab === 'capabilities' && (
+            <CapabilityBrowser
+              capabilities={capabilities as never[]}
+              loading={capsLoading}
+              onRefresh={refreshCaps}
+              workspacePath={workspacePath}
+            />
+          )}
+          {activeTab === 'settings' && config && (
+            <SettingsPanel
+              config={config as never}
+              systemPrompt={systemPrompt}
+              onSave={handleSaveConfig}
+            />
+          )}
+        </div>
+
+        {/* Debug side panel */}
+        {debugOpen && (
+          <div className="w-[420px] border-l border-gray-800 flex-shrink-0">
+            <DebugPanel />
+          </div>
         )}
-        {activeTab === 'settings' && config && (
-          <SettingsPanel
-            config={config as never}
-            systemPrompt={systemPrompt}
-            onSave={handleSaveConfig}
-          />
-        )}
-        {activeTab === 'debug' && <DebugPanel />}
       </div>
     </div>
   );
