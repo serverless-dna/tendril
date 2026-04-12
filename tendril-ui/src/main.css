@@ -4,3 +4,8 @@ html, body, #root {
   height: 100%;
   margin: 0;
 }
+
+input, textarea {
+  -webkit-text-size-adjust: 100%;
+  text-transform: none;
+}
