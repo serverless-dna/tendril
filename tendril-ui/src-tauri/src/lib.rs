@@ -103,6 +103,66 @@ async fn write_config(config: Value) -> Result<(), String> {
     write_app_config_inner(&config)
 }
 
+#[derive(serde::Serialize)]
+struct FileEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+    size: u64,
+}
+
+#[tauri::command]
+async fn list_directory(dir_path: String) -> Result<Vec<FileEntry>, String> {
+    let expanded = expand_tilde(&dir_path);
+    let dir = Path::new(&expanded);
+    if !dir.is_dir() {
+        return Err(format!("Not a directory: {expanded}"));
+    }
+
+    let mut entries: Vec<FileEntry> = Vec::new();
+    let read_dir = fs::read_dir(dir).map_err(|e| e.to_string())?;
+
+    for entry in read_dir {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let metadata = entry.metadata().map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip hidden files starting with .
+        if name.starts_with('.') {
+            continue;
+        }
+
+        entries.push(FileEntry {
+            name,
+            path: entry.path().to_string_lossy().to_string(),
+            is_dir: metadata.is_dir(),
+            size: metadata.len(),
+        });
+    }
+
+    // Directories first, then files, alphabetically
+    entries.sort_by(|a, b| {
+        b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn read_file_content(file_path: String) -> Result<String, String> {
+    let expanded = expand_tilde(&file_path);
+    let path = Path::new(&expanded);
+    if !path.is_file() {
+        return Err(format!("Not a file: {expanded}"));
+    }
+    // Limit to 1MB
+    let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
+    if metadata.len() > 1_048_576 {
+        return Err("File too large (>1MB)".to_string());
+    }
+    fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn read_tool_source(workspace: String, name: String) -> Result<String, String> {
     let expanded = expand_tilde(&workspace);
@@ -207,6 +267,8 @@ pub fn run() {
             init_workspace,
             read_capabilities,
             read_tool_source,
+            list_directory,
+            read_file_content,
             read_config,
             write_config,
             get_system_prompt,

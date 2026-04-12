@@ -6,9 +6,10 @@ import { CapabilityBrowser } from './components/CapabilityBrowser';
 import { SettingsPanel } from './components/SettingsPanel';
 import { WorkspaceSetup } from './components/WorkspaceSetup';
 import { DebugPanel } from './components/DebugPanel';
+import { FileExplorer } from './components/FileExplorer';
 import { useCapabilities } from './hooks/useCapabilities';
 
-type Tab = 'chat' | 'capabilities' | 'settings';
+type Tab = 'chat' | 'capabilities' | 'workspace' | 'settings';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('chat');
@@ -74,6 +75,7 @@ function AppContent() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'chat', label: 'Chat' },
     { id: 'capabilities', label: 'Capabilities' },
+    { id: 'workspace', label: 'Workspace' },
     { id: 'settings', label: 'Settings' },
   ];
 
@@ -125,7 +127,8 @@ function AppContent() {
               workspacePath={workspacePath}
             />
           )}
-          {activeTab === 'settings' && config && (
+          {activeTab === 'workspace' && <FileExplorer workspacePath={workspacePath} />}
+        {activeTab === 'settings' && config && (
             <SettingsPanel
               config={config as never}
               systemPrompt={systemPrompt}
