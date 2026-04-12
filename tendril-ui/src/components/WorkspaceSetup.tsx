@@ -6,21 +6,25 @@ interface WorkspaceSetupProps {
 }
 
 export function WorkspaceSetup({ onInit }: WorkspaceSetupProps) {
-  const [path, setPath] = useState('~/tendril-workspace');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleBrowse = async () => {
-    const selected = await open({ directory: true, multiple: false, title: 'Choose workspace directory' });
-    if (selected) {
-      setPath(selected as string);
-    }
-  };
+  const handleChooseFolder = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: 'Choose a folder for your Tendril workspace',
+    });
 
-  const handleInit = async () => {
+    if (!selected) return;
+
+    const path = selected as string;
+    setSelectedPath(path);
     setStatus('loading');
+
     try {
-      await onInit(path.trim());
+      await onInit(path);
       setStatus('success');
     } catch (err) {
       setStatus('error');
@@ -29,46 +33,50 @@ export function WorkspaceSetup({ onInit }: WorkspaceSetupProps) {
   };
 
   return (
-    <div className="flex items-center justify-center h-full bg-gray-50 dark:bg-gray-950">
-      <div className="max-w-md w-full p-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Welcome to Tendril</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          Choose a directory for your workspace. Tendril will create a capability registry and tools directory here.
+    <div className="flex items-center justify-center h-full bg-gray-950">
+      <div className="max-w-lg w-full p-12 text-center">
+        <div className="text-5xl mb-6">🌱</div>
+        <h1 className="text-3xl font-bold text-gray-100 mb-3">Welcome to Tendril</h1>
+        <p className="text-gray-400 mb-8">
+          Pick a folder to use as your workspace. Tendril will create a capability
+          registry and tools directory inside it.
         </p>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Workspace Path
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-            />
-            <button
-              onClick={handleBrowse}
-              className="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              Browse
-            </button>
-          </div>
-        </div>
+        {status === 'idle' && (
+          <button
+            onClick={handleChooseFolder}
+            className="rounded-lg bg-blue-600 px-8 py-3 text-base font-medium text-white hover:bg-blue-700 transition-colors"
+          >
+            Choose Workspace Folder
+          </button>
+        )}
 
-        <button
-          onClick={handleInit}
-          disabled={!path.trim() || status === 'loading'}
-          className="w-full rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300"
-        >
-          {status === 'loading' ? 'Creating...' : 'Initialize Workspace'}
-        </button>
+        {status === 'loading' && (
+          <div className="text-gray-400">
+            <div className="animate-pulse text-lg">Setting up workspace...</div>
+            {selectedPath && (
+              <div className="text-sm text-gray-500 mt-2 font-mono">{selectedPath}</div>
+            )}
+          </div>
+        )}
 
         {status === 'success' && (
-          <p className="mt-3 text-sm text-green-600">Workspace created successfully!</p>
+          <div>
+            <div className="text-green-400 text-lg mb-2">Workspace ready!</div>
+            <div className="text-sm text-gray-500 font-mono">{selectedPath}</div>
+          </div>
         )}
+
         {status === 'error' && (
-          <p className="mt-3 text-sm text-red-600">{errorMsg}</p>
+          <div>
+            <div className="text-red-400 text-sm mb-4">{errorMsg}</div>
+            <button
+              onClick={() => { setStatus('idle'); setErrorMsg(''); }}
+              className="rounded-lg border border-gray-600 px-6 py-2 text-sm text-gray-300 hover:bg-gray-800 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
         )}
       </div>
     </div>
