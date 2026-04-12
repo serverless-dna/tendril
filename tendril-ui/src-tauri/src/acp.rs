@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 use std::sync::OnceLock;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
@@ -38,9 +38,32 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
 
     let shell = app.shell();
 
+    // Resolve the deno sidecar path so the agent knows where to find it
+    let deno_path = {
+        let target_triple = if cfg!(target_arch = "aarch64") {
+            if cfg!(target_os = "macos") { "aarch64-apple-darwin" }
+            else { "aarch64-unknown-linux-gnu" }
+        } else if cfg!(target_os = "macos") { "x86_64-apple-darwin" }
+        else if cfg!(target_os = "windows") { "x86_64-pc-windows-msvc" }
+        else { "x86_64-unknown-linux-gnu" };
+
+        let resource_dir = app.path().resource_dir()
+            .map_err(|e| AcpError::ShellError(format!("resource dir: {e}")))?;
+        let deno = resource_dir.join("binaries").join(format!("deno-{target_triple}"));
+        if deno.exists() {
+            deno.to_string_lossy().to_string()
+        } else {
+            // Fallback to system deno
+            eprintln!("[acp] Bundled deno not found at {}, falling back to system deno", deno.display());
+            "deno".to_string()
+        }
+    };
+    eprintln!("[acp] Deno path: {deno_path}");
+
     let cmd = shell
         .sidecar("tendril-agent")
-        .map_err(|e| AcpError::ShellError(e.to_string()))?;
+        .map_err(|e| AcpError::ShellError(e.to_string()))?
+        .env("TENDRIL_DENO_PATH", &deno_path);
 
     let (mut rx, child) = cmd
         .spawn()

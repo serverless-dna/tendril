@@ -52,7 +52,7 @@ export function readConfig(workspaceOverride?: string): { config: WorkspaceConfi
       profile: (raw.model as Record<string, unknown>)?.profile as string | undefined ?? DEFAULTS.model.profile,
     },
     sandbox: {
-      denoPath: (raw.sandbox as Record<string, unknown>)?.denoPath as string ?? DEFAULTS.sandbox.denoPath,
+      denoPath: process.env.TENDRIL_DENO_PATH ?? (raw.sandbox as Record<string, unknown>)?.denoPath as string ?? DEFAULTS.sandbox.denoPath,
       timeoutMs: (raw.sandbox as Record<string, unknown>)?.timeoutMs as number ?? DEFAULTS.sandbox.timeoutMs,
       allowedDomains: (raw.sandbox as Record<string, unknown>)?.allowedDomains as string[] ?? DEFAULTS.sandbox.allowedDomains,
     },

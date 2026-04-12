@@ -22,6 +22,7 @@ const { config, workspace: workspacePath } = readConfig(workspaceArg);
 
 process.stderr.write(`[tendril-agent] workspace: ${workspacePath}\n`);
 process.stderr.write(`[tendril-agent] model: ${config.model.modelId} (${config.model.region})\n`);
+process.stderr.write(`[tendril-agent] deno: ${config.sandbox.denoPath}\n`);
 if (config.model.profile) {
   process.stderr.write(`[tendril-agent] AWS profile: ${config.model.profile}\n`);
 }
