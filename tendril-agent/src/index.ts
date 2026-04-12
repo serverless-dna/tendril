@@ -18,18 +18,6 @@ const agent = createAgent(config, workspacePath);
 let turnStartTime = 0;
 let turnToolCallCounter = 0;
 
-// Register hooks on the agent for streaming events
-agent.on('model_stream_chunk', (event: { data?: { delta?: string; text?: string } }) => {
-  const delta = event.data?.delta ?? event.data?.text ?? '';
-  if (delta) {
-    emitUpdate({
-      sessionUpdate: 'agent_message_chunk',
-      text: delta,
-      content: { type: 'text', text: delta },
-    });
-  }
-});
-
 const ctx: ProtocolContext = {
   sessionId: null,
 
@@ -46,20 +34,16 @@ const ctx: ProtocolContext = {
     }
 
     try {
-      // Use invoke (not stream) — hooks handle event emission
-      const result = await agent.invoke(userText);
+      const stream = agent.stream(userText);
+      let lastResult: unknown = undefined;
 
-      // Extract text from result and emit as a single chunk if hooks didn't fire
-      const resultText = extractResultText(result);
-      if (resultText) {
-        emitUpdate({
-          sessionUpdate: 'agent_message_chunk',
-          text: resultText,
-          content: { type: 'text', text: resultText },
-        });
+      for await (const event of stream) {
+        handleStreamEvent(event);
+        lastResult = event;
       }
 
-      const metrics = result?.metrics;
+      // Extract metrics from the final event
+      const metrics = extractMetrics(lastResult);
       emitTurnEnd(metrics);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -98,29 +82,61 @@ function extractTextContent(content: unknown): string {
   return '';
 }
 
-function extractResultText(result: unknown): string {
-  if (!result || typeof result !== 'object') return '';
-  const r = result as Record<string, unknown>;
+function handleStreamEvent(event: unknown): void {
+  if (!event || typeof event !== 'object') return;
+  const e = event as Record<string, unknown>;
+  const type = (e.type as string) ?? e.constructor?.name ?? 'unknown';
 
-  // Try result.message.content array
-  if (r.message && typeof r.message === 'object') {
-    const msg = r.message as Record<string, unknown>;
-    if (Array.isArray(msg.content)) {
-      const texts = msg.content
-        .filter((b: unknown) => typeof b === 'object' && b !== null && (b as Record<string, unknown>).type === 'text')
-        .map((b: unknown) => (b as Record<string, unknown>).text as string)
-        .filter(Boolean);
-      if (texts.length > 0) return texts.join('');
-    }
+  // Log every event for diagnostics
+  process.stderr.write(`[stream] ${type}\n`);
+
+  // Text streaming — try multiple field patterns
+  const delta = (e.delta as string) ?? (e.text as string) ?? '';
+  if (delta && (type.includes('Stream') || type.includes('stream') || type.includes('ContentBlock') || type.includes('content_block'))) {
+    emitUpdate({
+      sessionUpdate: 'agent_message_chunk',
+      text: delta,
+      content: { type: 'text', text: delta },
+    });
+    return;
   }
 
-  // Try result.text directly
-  if (typeof r.text === 'string') return r.text;
+  // Tool call announced
+  if (type.includes('ToolCall') || type.includes('tool_call') || type.includes('BeforeTool') || type.includes('before_tool')) {
+    turnToolCallCounter++;
+    const toolUse = (e.toolUse as Record<string, unknown>) ?? e;
+    emitUpdate({
+      sessionUpdate: 'tool_call',
+      toolCallId: (toolUse.toolUseId as string) ?? `tool-${turnToolCallCounter}`,
+      title: (toolUse.name as string) ?? 'unknown',
+      kind: (toolUse.name as string) === 'execute' ? 'execute' : 'other',
+      input: toolUse.input ?? {},
+    });
+    return;
+  }
 
-  // Try result.output
-  if (typeof r.output === 'string') return r.output;
+  // Tool result
+  if (type.includes('ToolResult') || type.includes('tool_result')) {
+    emitUpdate({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: (e.toolUseId as string) ?? `tool-${turnToolCallCounter}`,
+      status: 'completed',
+      rawOutput: typeof e.result === 'string' ? e.result : JSON.stringify(e.result),
+      title: (e.name as string) ?? 'unknown',
+    });
+    return;
+  }
+}
 
-  return '';
+function extractMetrics(lastEvent: unknown): AgentMetrics | undefined {
+  if (!lastEvent || typeof lastEvent !== 'object') return undefined;
+  const e = lastEvent as Record<string, unknown>;
+  if (e.metrics) return e.metrics as AgentMetrics;
+  if (e.result && typeof e.result === 'object') {
+    const r = e.result as Record<string, unknown>;
+    if (r.metrics) return r.metrics as AgentMetrics;
+  }
+  return undefined;
 }
 
 function emitTurnEnd(metrics: AgentMetrics | undefined): void {
