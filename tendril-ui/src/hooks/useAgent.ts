@@ -1,10 +1,11 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useAgentState } from '../context/AgentContext';
 
 export function useAgent() {
   const { state, dispatch } = useAgentState();
+  const assistantStarted = useRef(false);
 
   useEffect(() => {
     const unlisten: Array<() => void> = [];
@@ -12,8 +13,9 @@ export function useAgent() {
     const setup = async () => {
       unlisten.push(
         await listen<{ text: string }>('agent-message-chunk', (event) => {
-          if (state.messages.length === 0 || state.messages[state.messages.length - 1]?.role !== 'assistant') {
+          if (!assistantStarted.current) {
             dispatch({ type: 'START_ASSISTANT_MESSAGE' });
+            assistantStarted.current = true;
           }
           dispatch({ type: 'APPEND_TEXT', text: event.payload.text });
         }),
@@ -23,6 +25,10 @@ export function useAgent() {
         await listen<{ toolCallId: string; title: string; kind: string; input: Record<string, unknown> }>(
           'tool-call',
           (event) => {
+            if (!assistantStarted.current) {
+              dispatch({ type: 'START_ASSISTANT_MESSAGE' });
+              assistantStarted.current = true;
+            }
             dispatch({
               type: 'ADD_TOOL_CALL',
               toolCall: { ...event.payload, status: 'pending' },
@@ -66,19 +72,18 @@ export function useAgent() {
       unlisten.push(
         await listen('prompt-complete', () => {
           dispatch({ type: 'PROMPT_COMPLETE' });
+          assistantStarted.current = false;
         }),
       );
-
-      // Lifecycle and error listeners are in AgentProvider — always active
     };
 
     setup();
     return () => { unlisten.forEach((fn) => fn()); };
-  }, []);
+  }, [dispatch]);
 
   const sendPrompt = useCallback(async (text: string) => {
+    assistantStarted.current = false;
     dispatch({ type: 'ADD_USER_MESSAGE', text });
-    dispatch({ type: 'START_ASSISTANT_MESSAGE' });
     await invoke('send_prompt', { text });
   }, [dispatch]);
 
