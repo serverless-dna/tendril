@@ -21,6 +21,7 @@ export const executeCode = (workspacePath: string) =>
         workspacePath,
         config.sandbox.denoPath,
         config.sandbox.timeoutMs,
+        config.sandbox.allowedDomains,
       );
     },
   });

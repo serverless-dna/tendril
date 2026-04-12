@@ -8,6 +8,7 @@ export async function executeDeno(
   workspacePath: string,
   denoPath: string,
   timeoutMs: number,
+  allowedDomains: string[] = [],
 ): Promise<string> {
   const prelude = `const args = ${JSON.stringify(args)};\nconst __workspace = ${JSON.stringify(workspacePath)};\n`;
   const script = `${prelude}\n${code}`;
@@ -17,11 +18,15 @@ export async function executeDeno(
 
   try {
     return await new Promise<string>((resolve, reject) => {
+      const netFlag = allowedDomains.length > 0
+        ? `--allow-net=${allowedDomains.join(',')}`
+        : '--allow-net';
+
       const proc = spawn(denoPath, [
         'run',
         `--allow-read=${workspacePath}`,
         `--allow-write=${workspacePath}`,
-        '--allow-net',
+        netFlag,
         '--no-prompt',
         '--quiet',
         tmpFile,

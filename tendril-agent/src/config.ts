@@ -13,7 +13,7 @@ const DEFAULTS: WorkspaceConfig = {
   sandbox: {
     denoPath: 'deno',
     timeoutMs: 45000,
-    allowedDomains: ['esm.sh', 'deno.land', 'cdn.jsdelivr.net'],
+    allowedDomains: [],
   },
   registry: {
     maxCapabilities: 500,

@@ -154,7 +154,7 @@ fn default_app_config() -> Value {
         "sandbox": {
             "denoPath": "deno",
             "timeoutMs": 45000,
-            "allowedDomains": ["esm.sh", "deno.land", "cdn.jsdelivr.net"]
+            "allowedDomains": []
         },
         "registry": { "maxCapabilities": 500 },
         "agent": { "maxTurns": 100 }
