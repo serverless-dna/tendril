@@ -111,6 +111,7 @@ function AppContent() {
             capabilities={capabilities as never[]}
             loading={capsLoading}
             onRefresh={refreshCaps}
+            workspacePath={workspacePath}
           />
         )}
         {activeTab === 'settings' && config && (

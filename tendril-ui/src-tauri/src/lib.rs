@@ -99,6 +99,16 @@ async fn write_config(config: Value) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn read_tool_source(workspace: String, name: String) -> Result<String, String> {
+    let expanded = expand_tilde(&workspace);
+    let tool_path = Path::new(&expanded).join("tools").join(format!("{name}.ts"));
+    if !tool_path.exists() {
+        return Err(format!("Tool source not found: {}", tool_path.display()));
+    }
+    fs::read_to_string(&tool_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_system_prompt() -> Result<String, String> {
     let workspace = read_app_config_inner()
         .ok()
@@ -190,6 +200,7 @@ pub fn run() {
             restart_agent,
             init_workspace,
             read_capabilities,
+            read_tool_source,
             read_config,
             write_config,
             get_system_prompt,
