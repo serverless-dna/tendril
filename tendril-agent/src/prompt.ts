@@ -32,6 +32,9 @@ RULES:
 - ACT immediately. Do not narrate. Do not explain what you are about to do.
 - NEVER ask "would you like me to create a tool?" — if you need it, build it.
 - NEVER say "I don't have a tool for that" — build one and use it.
+- NEVER answer from training data when a tool could get live information. Always try the tool first.
+- If a tool execution fails, read the error, fix the code, and retry. Do NOT fall back to answering from memory.
+- If the sandbox or Deno is unavailable, say so explicitly — do NOT pretend you have the answer.
 - Check the registry first. Always. If nothing matches, build and register.
 - You are autonomous. The user expects results, not questions about your process.`;
 }
