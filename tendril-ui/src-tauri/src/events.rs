@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter};
 
 /// All protocol messages are forwarded to the frontend as "agent-debug" events
@@ -19,6 +20,14 @@ fn chrono_now() -> String {
     format!("{}", now.as_millis())
 }
 
+use std::sync::Mutex as StdMutex;
+
+static LAST_LINE: OnceLock<StdMutex<String>> = OnceLock::new();
+
+fn dedup_state() -> &'static StdMutex<String> {
+    LAST_LINE.get_or_init(|| StdMutex::new(String::new()))
+}
+
 pub fn handle_agent_line(app: &AppHandle, line: &[u8]) {
     let line_str = match std::str::from_utf8(line) {
         Ok(s) => s.trim(),
@@ -27,6 +36,16 @@ pub fn handle_agent_line(app: &AppHandle, line: &[u8]) {
 
     if line_str.is_empty() {
         return;
+    }
+
+    // Deduplicate — Tauri stdout can deliver the same line twice
+    {
+        let mut last = dedup_state().lock().unwrap();
+        if *last == line_str {
+            *last = String::new();
+            return;
+        }
+        *last = line_str.to_string();
     }
 
     let msg: Value = match serde_json::from_str(line_str) {

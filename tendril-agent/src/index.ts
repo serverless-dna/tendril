@@ -82,6 +82,10 @@ function extractTextContent(content: unknown): string {
 
 function handleStreamEvent(event: { type?: string; [key: string]: unknown }): void {
   const type = event.type ?? event.constructor?.name ?? '';
+  const keys = Object.keys(event);
+
+  // Debug: log every event type we receive
+  process.stderr.write(`[stream] type="${type}" constructor="${event.constructor?.name}" keys=${JSON.stringify(keys)}\n`);
 
   if (type === 'ModelStreamUpdateEvent' || type === 'model_stream_update') {
     const delta = (event as { delta?: string }).delta ?? '';
