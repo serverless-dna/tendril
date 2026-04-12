@@ -1,32 +1,27 @@
 import React from 'react';
 
-// 16x16 pixel art octopus, rendered as SVG rects for crisp scaling
+// 16x16 pixel art — small body, tendrils radiating all sides, no eyes
 const pixels = [
-  '......PPPP......',
-  '....PPPPPPPP....',
-  '...PPPPPPPPPP...',
-  '..PPPPPPPPPPPP..',
-  '..PPEEPPPPEEPP..',
-  '..PBEPPPPBEPPP..',
-  '..PPEEPPPPEEPP..',
-  '..PPPPMMPPPPP...',
-  '..PPPPMMMPPPPP..',
-  '...PPPPPPPPPP...',
-  '..PPPPDPPPPDPP..',
-  '..PPDDDPPDDPPP..',
-  '.PPDDTDPDDTDPP.',
-  '.PDDTTDDDTTDPP.',
-  '.PDTTTPPPDTTTPP.',
-  '..PTTTPPPPTTTPP.',
+  '....P...P...P...',
+  '...P.P.P.P.P.P..',
+  '..P..P...P..P...',
+  '..P..PPPPP..P...',
+  '.P..PPPPPPP..P..',
+  '.P.PPPPPPPPP.P..',
+  'P..PPPPPPPPP..P.',
+  '...PPPPPPPPP....',
+  'P..PPPPPPPPP..P.',
+  '.P.PPPPPPPPP.P..',
+  '.P..PPPPPPP..P..',
+  '..P..PPPPP..P...',
+  '..P..P...P..P...',
+  '...P.P.P.P.P....',
+  '....P...P...P...',
+  '................',
 ];
 
 const colors: Record<string, string> = {
-  P: '#5842B4',  // purple body
-  D: '#3A2A82',  // dark purple tentacles
-  E: '#FFFFFF',  // eye white
-  B: '#14141E',  // eye pupil
-  M: '#C864A0',  // mouth accent
-  T: 'transparent',
+  P: '#7C5CBF',
   '.': 'transparent',
 };
 
@@ -38,7 +33,6 @@ interface TendrilLogoProps {
 export function TendrilLogo({ size = 128, className = '' }: TendrilLogoProps) {
   const gridW = 16;
   const gridH = pixels.length;
-  const cellSize = size / gridW;
 
   return (
     <svg
