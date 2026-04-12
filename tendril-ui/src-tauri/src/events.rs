@@ -15,9 +15,8 @@ fn chrono_now() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    let secs = now.as_secs();
-    let ms = now.subsec_millis();
-    format!("{secs}.{ms:03}")
+    // Send epoch millis — frontend formats for display
+    format!("{}", now.as_millis())
 }
 
 pub fn handle_agent_line(app: &AppHandle, line: &[u8]) {

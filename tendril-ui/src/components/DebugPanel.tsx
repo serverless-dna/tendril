@@ -8,6 +8,25 @@ const directionColors: Record<string, string> = {
   'system': 'text-red-400',
 };
 
+const directionLabels: Record<string, string> = {
+  'host→agent': 'HOST → AGENT',
+  'agent→host': 'AGENT → HOST',
+  'agent-stderr': 'STDERR',
+  'system': 'SYSTEM',
+};
+
+function formatTimestamp(raw?: string): string {
+  if (!raw) return '';
+  const ms = parseInt(raw, 10);
+  if (isNaN(ms)) return raw;
+  const d = new Date(ms);
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  const ss = d.getSeconds().toString().padStart(2, '0');
+  const mss = d.getMilliseconds().toString().padStart(3, '0');
+  return `${hh}:${mm}:${ss}.${mss}`;
+}
+
 export function DebugPanel() {
   const { debugLog } = useAgentState();
   const [autoScroll, setAutoScroll] = useState(true);
@@ -44,14 +63,14 @@ export function DebugPanel() {
           </div>
         )}
         {debugLog.map((entry) => (
-          <div key={entry.id} className="mb-1 border-b border-gray-900 pb-1">
-            <span className={`font-bold ${directionColors[entry.direction] ?? 'text-gray-500'}`}>
-              {entry.direction}
-            </span>
-            {entry.timestamp && (
-              <span className="text-gray-700 ml-2">{entry.timestamp}</span>
-            )}
-            <pre className="text-gray-400 whitespace-pre-wrap break-all mt-0.5">
+          <div key={entry.id} className="mb-0.5 py-1 border-b border-gray-900/50">
+            <div className="flex items-baseline gap-2">
+              <span className="text-gray-600 tabular-nums">{formatTimestamp(entry.timestamp)}</span>
+              <span className={`font-bold text-[10px] uppercase tracking-wider ${directionColors[entry.direction] ?? 'text-gray-500'}`}>
+                {directionLabels[entry.direction] ?? entry.direction}
+              </span>
+            </div>
+            <pre className="text-gray-400 whitespace-pre-wrap break-all mt-0.5 pl-4">
               {typeof entry.message === 'string'
                 ? entry.message
                 : JSON.stringify(entry.message, null, 2)}
