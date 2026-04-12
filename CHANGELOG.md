@@ -16,3 +16,4 @@ All notable changes to the Tendril project will be documented in this file.
 - Makefile with dev, build, test, sea, release, and clean targets
 - Deno binary auto-downloaded and bundled as Tauri sidecar (pinned v2.7.12)
 - App config at ~/.tendril/config.json — persists workspace path, model, AWS profile, sandbox settings
+- README with agent loop walkthrough, architecture diagram, and quick start guide
