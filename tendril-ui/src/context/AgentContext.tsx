@@ -162,20 +162,52 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     const cleanups: Array<() => void> = [];
 
     const setup = async () => {
-      // Debug log collector
+      // Debug log collector — collapses consecutive agent_message_chunk into one entry
       cleanups.push(await listen<{ direction: string; message: unknown; timestamp?: string }>(
         'agent-debug',
         (event) => {
-          debugCounterRef.current += 1;
-          setDebugLog((prev) => [
-            ...prev.slice(-500),
-            {
-              id: debugCounterRef.current,
-              direction: event.payload.direction,
-              message: event.payload.message,
-              timestamp: event.payload.timestamp,
-            },
-          ]);
+          const msg = event.payload.message as Record<string, unknown> | undefined;
+          const isChunk = msg?.method === 'session/update'
+            && (msg?.params as Record<string, unknown>)?.update
+            && ((msg?.params as Record<string, unknown>)?.update as Record<string, unknown>)?.sessionUpdate === 'agent_message_chunk';
+
+          setDebugLog((prev) => {
+            if (isChunk && prev.length > 0) {
+              const last = prev[prev.length - 1];
+              if (last.direction === 'agent→host' && (last as { _isChunkGroup?: boolean })._isChunkGroup) {
+                // Append to existing chunk group
+                const text = ((msg?.params as Record<string, unknown>)?.update as Record<string, unknown>)?.text as string ?? '';
+                const updated = { ...last, message: (last.message as string) + text, timestamp: event.payload.timestamp };
+                return [...prev.slice(0, -1), updated];
+              }
+            }
+
+            debugCounterRef.current += 1;
+
+            if (isChunk) {
+              const text = ((msg?.params as Record<string, unknown>)?.update as Record<string, unknown>)?.text as string ?? '';
+              return [
+                ...prev.slice(-500),
+                {
+                  id: debugCounterRef.current,
+                  direction: 'agent→host',
+                  message: `📝 streaming: ${text}`,
+                  timestamp: event.payload.timestamp,
+                  _isChunkGroup: true,
+                } as DebugEntry & { _isChunkGroup: boolean },
+              ];
+            }
+
+            return [
+              ...prev.slice(-500),
+              {
+                id: debugCounterRef.current,
+                direction: event.payload.direction,
+                message: event.payload.message,
+                timestamp: event.payload.timestamp,
+              },
+            ];
+          });
         },
       ));
 
