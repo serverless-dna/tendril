@@ -4,6 +4,7 @@ import { MessageBubble } from './MessageBubble';
 import { ToolTrace } from './ToolTrace';
 import { TokenUsage } from './TokenUsage';
 import { InputBar } from './InputBar';
+import { TendrilLogo } from './TendrilLogo';
 
 export function ChatView() {
   const { messages, isProcessing, connectionStatus, error, sendPrompt, cancelPrompt } = useAgent();
@@ -17,7 +18,10 @@ export function ChatView() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Tendril</h1>
+        <div className="flex items-center gap-2">
+          <TendrilLogo size={24} />
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Tendril</h1>
+        </div>
         <div className="flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${

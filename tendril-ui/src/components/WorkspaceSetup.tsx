@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { TendrilLogo } from './TendrilLogo';
 
 interface WorkspaceSetupProps {
   onInit: (path: string) => Promise<void>;
@@ -35,7 +36,7 @@ export function WorkspaceSetup({ onInit }: WorkspaceSetupProps) {
   return (
     <div className="flex items-center justify-center h-full bg-gray-950">
       <div className="max-w-lg w-full p-12 text-center">
-        <div className="text-5xl mb-6">🌱</div>
+        <TendrilLogo size={128} className="mx-auto mb-6" />
         <h1 className="text-3xl font-bold text-gray-100 mb-3">Welcome to Tendril</h1>
         <p className="text-gray-400 mb-8">
           Pick a folder to use as your workspace. Tendril will create a capability
