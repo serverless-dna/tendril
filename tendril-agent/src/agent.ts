@@ -7,6 +7,12 @@ import { executeCode } from './tools/execute.js';
 import { TENDRIL_SYSTEM_PROMPT } from './prompt.js';
 import type { WorkspaceConfig } from './types.js';
 
+// Null printer — suppresses Strands' default stdout printing
+const nullPrinter = {
+  print: () => {},
+  printNewline: () => {},
+};
+
 export function createAgent(config: WorkspaceConfig, workspacePath: string): Agent {
   // Set AWS_PROFILE before SDK init so the credential chain picks it up
   if (config.model.profile) {
@@ -21,6 +27,7 @@ export function createAgent(config: WorkspaceConfig, workspacePath: string): Age
   return new Agent({
     model,
     systemPrompt: TENDRIL_SYSTEM_PROMPT(workspacePath),
+    printer: nullPrinter as never,
     tools: [
       searchCapabilities(workspacePath),
       registerCapability(workspacePath),

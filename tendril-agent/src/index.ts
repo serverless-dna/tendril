@@ -1,7 +1,7 @@
 import { readConfig } from './config.js';
 import { createAgent } from './agent.js';
 import { startProtocolLoop, emitUpdate } from './protocol.js';
-import type { ProtocolContext, } from './protocol.js';
+import type { ProtocolContext } from './protocol.js';
 
 // Workspace can be passed as arg or read from ~/.tendril/config.json
 const workspaceArg = process.argv[2] || undefined;
@@ -17,6 +17,18 @@ const agent = createAgent(config, workspacePath);
 
 let turnStartTime = 0;
 let turnToolCallCounter = 0;
+
+// Register hooks on the agent for streaming events
+agent.on('model_stream_chunk', (event: { data?: { delta?: string; text?: string } }) => {
+  const delta = event.data?.delta ?? event.data?.text ?? '';
+  if (delta) {
+    emitUpdate({
+      sessionUpdate: 'agent_message_chunk',
+      text: delta,
+      content: { type: 'text', text: delta },
+    });
+  }
+});
 
 const ctx: ProtocolContext = {
   sessionId: null,
@@ -34,18 +46,24 @@ const ctx: ProtocolContext = {
     }
 
     try {
-      const stream = agent.stream(userText);
+      // Use invoke (not stream) — hooks handle event emission
+      const result = await agent.invoke(userText);
 
-      for await (const event of stream) {
-        handleStreamEvent(event);
+      // Extract text from result and emit as a single chunk if hooks didn't fire
+      const resultText = extractResultText(result);
+      if (resultText) {
+        emitUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          text: resultText,
+          content: { type: 'text', text: resultText },
+        });
       }
 
-      const result = stream.return?.(undefined as never);
-      const metrics = (result as { value?: { metrics?: AgentMetrics } })?.value?.metrics;
-
+      const metrics = result?.metrics;
       emitTurnEnd(metrics);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[tendril-agent] Error: ${message}\n`);
 
       if (isAuthError(message)) {
         emitUpdate({ sessionUpdate: 'error', message: `Bedrock authentication failed: ${message}` });
@@ -80,42 +98,29 @@ function extractTextContent(content: unknown): string {
   return '';
 }
 
-function handleStreamEvent(event: { type?: string; [key: string]: unknown }): void {
-  const type = event.type ?? event.constructor?.name ?? '';
-  const keys = Object.keys(event);
+function extractResultText(result: unknown): string {
+  if (!result || typeof result !== 'object') return '';
+  const r = result as Record<string, unknown>;
 
-  // Debug: log every event type we receive
-  process.stderr.write(`[stream] type="${type}" constructor="${event.constructor?.name}" keys=${JSON.stringify(keys)}\n`);
-
-  if (type === 'ModelStreamUpdateEvent' || type === 'model_stream_update') {
-    const delta = (event as { delta?: string }).delta ?? '';
-    if (delta) {
-      emitUpdate({
-        sessionUpdate: 'agent_message_chunk',
-        text: delta,
-        content: { type: 'text', text: delta },
-      });
+  // Try result.message.content array
+  if (r.message && typeof r.message === 'object') {
+    const msg = r.message as Record<string, unknown>;
+    if (Array.isArray(msg.content)) {
+      const texts = msg.content
+        .filter((b: unknown) => typeof b === 'object' && b !== null && (b as Record<string, unknown>).type === 'text')
+        .map((b: unknown) => (b as Record<string, unknown>).text as string)
+        .filter(Boolean);
+      if (texts.length > 0) return texts.join('');
     }
-  } else if (type === 'BeforeToolCallEvent' || type === 'before_tool_call') {
-    turnToolCallCounter++;
-    const toolUse = (event as { toolUse?: { name?: string; toolUseId?: string; input?: unknown } }).toolUse;
-    emitUpdate({
-      sessionUpdate: 'tool_call',
-      toolCallId: toolUse?.toolUseId ?? `tool-${turnToolCallCounter}`,
-      title: toolUse?.name ?? 'unknown',
-      kind: toolUse?.name === 'execute' ? 'execute' : 'other',
-      input: toolUse?.input ?? {},
-    });
-  } else if (type === 'ToolResultEvent' || type === 'tool_result') {
-    const toolResult = event as { toolUseId?: string; result?: unknown; name?: string };
-    emitUpdate({
-      sessionUpdate: 'tool_call_update',
-      toolCallId: toolResult.toolUseId ?? `tool-${turnToolCallCounter}`,
-      status: 'completed',
-      rawOutput: typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result),
-      title: toolResult.name ?? 'unknown',
-    });
   }
+
+  // Try result.text directly
+  if (typeof r.text === 'string') return r.text;
+
+  // Try result.output
+  if (typeof r.output === 'string') return r.output;
+
+  return '';
 }
 
 function emitTurnEnd(metrics: AgentMetrics | undefined): void {
@@ -158,8 +163,8 @@ function emitTurnEnd(metrics: AgentMetrics | undefined): void {
 }
 
 function isAuthError(message: string): boolean {
-  const authPatterns = ['UnrecognizedClientException', 'AccessDeniedException', 'ExpiredTokenException', 'credentials'];
-  return authPatterns.some((p) => message.includes(p));
+  const authPatterns = ['UnrecognizedClientException', 'AccessDeniedException', 'ExpiredTokenException', 'credentials', 'security token'];
+  return authPatterns.some((p) => message.toLowerCase().includes(p.toLowerCase()));
 }
 
 startProtocolLoop(ctx);
