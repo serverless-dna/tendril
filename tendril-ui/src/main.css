@@ -12,32 +12,23 @@ input, textarea {
   text-transform: none;
 }
 
-/* Streamdown requires these CSS custom properties (shadcn/ui convention) */
+/* Streamdown CSS variables — dark mode always (Tendril is always dark) */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 0 0% 3.9%;
-  --border: 0 0% 89.8%;
-  --primary: 0 0% 9%;
-  --primary-foreground: 0 0% 98%;
-  --muted: 0 0% 96.1%;
-  --muted-foreground: 0 0% 45.1%;
-  --radius: 0.5rem;
-}
-
-.dark, [data-theme="dark"] {
-  --background: 0 0% 3.9%;
-  --foreground: 0 0% 98%;
-  --border: 0 0% 14.9%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 0 0% 9%;
-  --muted: 0 0% 14.9%;
-  --muted-foreground: 0 0% 63.9%;
-}
-
-/* Force dark mode (Tendril is always dark) */
-html {
   color-scheme: dark;
+  --background: 222 20% 7%;
+  --foreground: 210 20% 92%;
+  --border: 220 15% 18%;
+  --primary: 210 20% 92%;
+  --primary-foreground: 222 20% 7%;
+  --muted: 220 15% 13%;
+  --muted-foreground: 220 10% 55%;
+  --radius: 0.5rem;
+  --card: 222 20% 9%;
+  --card-foreground: 210 20% 92%;
+  --accent: 220 15% 16%;
+  --accent-foreground: 210 20% 92%;
 }
+
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));

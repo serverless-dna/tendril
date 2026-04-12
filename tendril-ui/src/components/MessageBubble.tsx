@@ -26,7 +26,7 @@ export function MessageBubble({ role, text, isStreaming = false }: MessageBubble
 
   return (
     <div className="flex justify-start mb-3">
-      <div className="max-w-[85%] rounded-lg px-4 py-3 dark text-sm">
+      <div className="max-w-[85%] text-sm text-gray-100">
         <Streamdown plugins={plugins} isAnimating={isStreaming}>
           {text || '\u00A0'}
         </Streamdown>
