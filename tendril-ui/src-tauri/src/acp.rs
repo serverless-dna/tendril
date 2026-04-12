@@ -38,32 +38,49 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
 
     let shell = app.shell();
 
-    // Resolve the deno sidecar path so the agent knows where to find it
-    let deno_path = {
-        let target_triple = if cfg!(target_arch = "aarch64") {
-            if cfg!(target_os = "macos") { "aarch64-apple-darwin" }
-            else { "aarch64-unknown-linux-gnu" }
-        } else if cfg!(target_os = "macos") { "x86_64-apple-darwin" }
-        else if cfg!(target_os = "windows") { "x86_64-pc-windows-msvc" }
-        else { "x86_64-unknown-linux-gnu" };
+    // Resolve the deno sidecar path and write to config so the agent reads it
+    let target_triple = if cfg!(target_arch = "aarch64") {
+        if cfg!(target_os = "macos") { "aarch64-apple-darwin" }
+        else { "aarch64-unknown-linux-gnu" }
+    } else if cfg!(target_os = "macos") { "x86_64-apple-darwin" }
+    else if cfg!(target_os = "windows") { "x86_64-pc-windows-msvc" }
+    else { "x86_64-unknown-linux-gnu" };
 
-        let resource_dir = app.path().resource_dir()
-            .map_err(|e| AcpError::ShellError(format!("resource dir: {e}")))?;
-        let deno = resource_dir.join("binaries").join(format!("deno-{target_triple}"));
-        if deno.exists() {
-            deno.to_string_lossy().to_string()
-        } else {
-            // Fallback to system deno
-            eprintln!("[acp] Bundled deno not found at {}, falling back to system deno", deno.display());
-            "deno".to_string()
-        }
+    // Try resource dir (production), then src-tauri/binaries (dev)
+    let deno_path = {
+        let resource_deno = app.path().resource_dir()
+            .ok()
+            .map(|d| d.join("binaries").join(format!("deno-{target_triple}")));
+
+        // Dev mode: binaries are relative to the src-tauri dir
+        let dev_deno = std::env::current_dir()
+            .ok()
+            .map(|d| d.join("binaries").join(format!("deno-{target_triple}")));
+
+        if let Some(ref p) = resource_deno {
+            if p.exists() { p.to_string_lossy().to_string() }
+            else if let Some(ref d) = dev_deno {
+                if d.exists() { d.to_string_lossy().to_string() }
+                else { "deno".to_string() }
+            } else { "deno".to_string() }
+        } else if let Some(ref d) = dev_deno {
+            if d.exists() { d.to_string_lossy().to_string() }
+            else { "deno".to_string() }
+        } else { "deno".to_string() }
     };
     eprintln!("[acp] Deno path: {deno_path}");
 
+    // Write deno path into config so the agent can read it
+    if let Ok(mut cfg) = crate::read_app_config_inner() {
+        if let Some(sandbox) = cfg.get_mut("sandbox").and_then(|s| s.as_object_mut()) {
+            sandbox.insert("denoPath".to_string(), serde_json::json!(deno_path));
+            let _ = crate::write_app_config_inner(&cfg);
+        }
+    }
+
     let cmd = shell
         .sidecar("tendril-agent")
-        .map_err(|e| AcpError::ShellError(e.to_string()))?
-        .env("TENDRIL_DENO_PATH", &deno_path);
+        .map_err(|e| AcpError::ShellError(e.to_string()))?;
 
     let (mut rx, child) = cmd
         .spawn()
