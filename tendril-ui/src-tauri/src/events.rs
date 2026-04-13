@@ -11,7 +11,7 @@ fn emit_debug(app: &AppHandle, direction: &str, msg: &Value) {
     }));
 }
 
-fn chrono_now() -> String {
+pub fn chrono_now() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();

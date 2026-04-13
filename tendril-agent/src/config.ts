@@ -37,7 +37,11 @@ export function readConfig(workspaceOverride?: string): { config: WorkspaceConfi
 
   let raw: Record<string, unknown> = {};
   if (fs.existsSync(configPath)) {
-    raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    try {
+      raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (err) {
+      throw new Error(`Failed to parse config at ${configPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const workspace = workspaceOverride

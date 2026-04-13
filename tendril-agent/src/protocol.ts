@@ -1,5 +1,6 @@
 import * as readline from 'node:readline';
-import type { AcpRequest, AcpNotification, SessionUpdate } from './types.js';
+import { randomUUID } from 'node:crypto';
+import type { AcpRequest, SessionUpdate } from './types.js';
 
 export interface ProtocolContext {
   sessionId: string | null;
@@ -19,11 +20,11 @@ export function emitUpdate(update: SessionUpdate): void {
   });
 }
 
-export function emitResponse(id: string, result: Record<string, unknown> = {}): void {
+function emitResponse(id: string, result: Record<string, unknown> = {}): void {
   emit({ jsonrpc: '2.0', id, result });
 }
 
-export function emitError(id: string, code: number, message: string): void {
+function emitError(id: string, code: number, message: string): void {
   emit({ jsonrpc: '2.0', id, error: { code, message } });
 }
 
@@ -35,8 +36,7 @@ function handleInitialize(req: AcpRequest): void {
 }
 
 function handleNewSession(req: AcpRequest, ctx: ProtocolContext): void {
-  const crypto = require('node:crypto');
-  const sessionId = crypto.randomUUID();
+  const sessionId = randomUUID();
   ctx.sessionId = sessionId;
 
   emitResponse(req.id, { sessionId });
@@ -93,16 +93,24 @@ export function startProtocolLoop(ctx: ProtocolContext): void {
     const trimmed = line.trim();
     if (!trimmed) return;
 
+    let msg: unknown;
     try {
-      const msg = JSON.parse(trimmed);
+      msg = JSON.parse(trimmed);
+    } catch (err) {
+      process.stderr.write(`Protocol error: invalid JSON: ${err instanceof Error ? err.message : String(err)}\n`);
+      return;
+    }
 
-      if (msg.method === 'notifications/cancelled') {
-        handleCancel(msg.params ?? {}, ctx);
+    try {
+      const parsed = msg as Record<string, unknown>;
+
+      if (parsed.method === 'notifications/cancelled') {
+        handleCancel((parsed.params as Record<string, unknown>) ?? {}, ctx);
         return;
       }
 
-      if (msg.id && msg.method) {
-        await handleRequest(msg as AcpRequest, ctx);
+      if (parsed.id && parsed.method) {
+        await handleRequest(parsed as unknown as AcpRequest, ctx);
       }
     } catch (err) {
       process.stderr.write(`Protocol error: ${err}\n`);

@@ -45,18 +45,17 @@ export function InputBar({ onSubmit, onCancel, isProcessing }: InputBarProps) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        disabled={isProcessing}
         placeholder={isProcessing ? 'Processing...' : 'Type a message... (Shift+Enter for new line)'}
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}
         rows={2}
-        className="flex-1 rounded-lg border border-gray-300 px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+        className="flex-1 rounded-lg border border-gray-300 px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
       />
       {isProcessing ? (
         <button
           onClick={onCancel}
-          className="rounded-lg bg-red-500 px-4 py-3 text-sm text-white hover:bg-red-600 flex-shrink-0"
+          className="rounded-lg bg-blue-600 px-4 py-3 text-sm text-white hover:bg-blue-700 flex-shrink-0"
         >
           Cancel
         </button>

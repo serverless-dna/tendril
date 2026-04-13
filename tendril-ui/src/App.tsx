@@ -8,6 +8,7 @@ import { WorkspaceSetup } from './components/WorkspaceSetup';
 import { DebugPanel } from './components/DebugPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { useCapabilities } from './hooks/useCapabilities';
+import type { AppConfig } from './types';
 
 type Tab = 'chat' | 'capabilities' | 'workspace' | 'settings';
 
@@ -16,7 +17,7 @@ function AppContent() {
   const [debugOpen, setDebugOpen] = useState(false);
   const [hasWorkspace, setHasWorkspace] = useState<boolean | null>(null);
   const [workspacePath, setWorkspacePath] = useState('');
-  const [config, setConfig] = useState<Record<string, unknown> | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const [systemPrompt, setSystemPrompt] = useState('');
   const { capabilities, loading: capsLoading, refresh: refreshCaps } = useCapabilities(workspacePath);
 
@@ -26,8 +27,8 @@ function AppContent() {
 
   const loadAppConfig = async () => {
     try {
-      const cfg = await invoke<Record<string, unknown>>('read_config');
-      const workspace = cfg.workspace as string | null;
+      const cfg = await invoke<AppConfig>('read_config');
+      const workspace = cfg.workspace;
 
       if (workspace) {
         setWorkspacePath(workspace);
@@ -47,16 +48,16 @@ function AppContent() {
   const handleInit = async (path: string) => {
     await invoke('init_workspace', { path });
     setWorkspacePath(path);
-    const cfg = await invoke<Record<string, unknown>>('read_config');
+    const cfg = await invoke<AppConfig>('read_config');
     setConfig(cfg);
     setHasWorkspace(true);
     await invoke('connect_agent_cmd');
   };
 
-  const handleSaveConfig = async (partial: unknown) => {
+  const handleSaveConfig = async (partial: Partial<AppConfig>) => {
     const merged = deepMerge(config ?? {}, partial as Record<string, unknown>);
     await invoke('write_config', { config: merged });
-    setConfig(merged);
+    setConfig(merged as AppConfig);
     await invoke('restart_agent');
   };
 
@@ -121,16 +122,16 @@ function AppContent() {
           {activeTab === 'chat' && <ChatView />}
           {activeTab === 'capabilities' && (
             <CapabilityBrowser
-              capabilities={capabilities as never[]}
+              capabilities={capabilities}
               loading={capsLoading}
               onRefresh={refreshCaps}
               workspacePath={workspacePath}
             />
           )}
           {activeTab === 'workspace' && <FileExplorer workspacePath={workspacePath} />}
-        {activeTab === 'settings' && config && (
+          {activeTab === 'settings' && config && (
             <SettingsPanel
-              config={config as never}
+              config={config}
               systemPrompt={systemPrompt}
               onSave={handleSaveConfig}
             />

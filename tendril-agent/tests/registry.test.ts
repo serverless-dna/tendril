@@ -9,8 +9,8 @@ let registry: CapabilityRegistry;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendril-reg-'));
-  fs.writeFileSync(path.join(tmpDir, 'index.json'), JSON.stringify({ version: '1.0.0', capabilities: [] }));
   fs.mkdirSync(path.join(tmpDir, 'tools'));
+  fs.writeFileSync(path.join(tmpDir, 'tools', 'index.json'), JSON.stringify({ version: '1.0.0', capabilities: [] }));
   registry = new CapabilityRegistry(tmpDir);
 });
 
@@ -30,7 +30,7 @@ describe('CapabilityRegistry', () => {
     it('registers a new capability', () => {
       registry.register(sampleDef, 'console.log("hello")');
 
-      const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'index.json'), 'utf-8'));
+      const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tools', 'index.json'), 'utf-8'));
       expect(index.capabilities).toHaveLength(1);
       expect(index.capabilities[0].name).toBe('fetch_url');
 
@@ -42,7 +42,7 @@ describe('CapabilityRegistry', () => {
       registry.register(sampleDef, 'v1');
       registry.register(sampleDef, 'v2');
 
-      const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'index.json'), 'utf-8'));
+      const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tools', 'index.json'), 'utf-8'));
       expect(index.capabilities).toHaveLength(1);
 
       const toolFile = fs.readFileSync(path.join(tmpDir, 'tools', 'fetch_url.ts'), 'utf-8');

@@ -55,19 +55,6 @@ export interface AcpRequest {
   params: Record<string, unknown>;
 }
 
-export interface AcpResponse {
-  jsonrpc: '2.0';
-  id: string;
-  result?: Record<string, unknown>;
-  error?: { code: number; message: string };
-}
-
-export interface AcpNotification {
-  jsonrpc: '2.0';
-  method: string;
-  params: Record<string, unknown>;
-}
-
 // === Stream Event Types ===
 
 export type SessionUpdateType =

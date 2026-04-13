@@ -5,7 +5,7 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 
-use crate::events::{handle_agent_line, log_host_to_agent};
+use crate::events::{handle_agent_line, log_host_to_agent, chrono_now};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AcpError {
@@ -21,8 +21,6 @@ pub enum AcpError {
 
 struct AgentProcess {
     child: CommandChild,
-    #[allow(dead_code)]
-    session_id: Option<String>,
     prompt_counter: u32,
     app: AppHandle,
 }
@@ -33,14 +31,34 @@ fn agent_state() -> &'static Mutex<Option<AgentProcess>> {
     AGENT.get_or_init(|| Mutex::new(None))
 }
 
-pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
-    // Guard: don't spawn a second agent if one is already running
-    {
-        let state = agent_state().lock().await;
-        if state.is_some() {
-            eprintln!("[acp] Agent already connected — skipping");
-            return Ok(());
+/// Resolve the deno sidecar path: try resource dir (production), then cwd/binaries (dev), then PATH
+fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
+    let candidates = [
+        app.path().resource_dir()
+            .ok()
+            .map(|d| d.join("binaries").join(format!("deno-{target_triple}"))),
+        std::env::current_dir()
+            .ok()
+            .map(|d| d.join("binaries").join(format!("deno-{target_triple}"))),
+    ];
+
+    for candidate in &candidates {
+        if let Some(ref path) = candidate {
+            if path.exists() {
+                return path.to_string_lossy().to_string();
+            }
         }
+    }
+
+    "deno".to_string()
+}
+
+pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
+    // Hold lock through entire init to prevent race condition
+    let mut state = agent_state().lock().await;
+    if state.is_some() {
+        eprintln!("[acp] Agent already connected — skipping");
+        return Ok(());
     }
 
     eprintln!("[acp] Spawning tendril-agent sidecar...");
@@ -55,28 +73,7 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
     else if cfg!(target_os = "windows") { "x86_64-pc-windows-msvc" }
     else { "x86_64-unknown-linux-gnu" };
 
-    // Try resource dir (production), then src-tauri/binaries (dev)
-    let deno_path = {
-        let resource_deno = app.path().resource_dir()
-            .ok()
-            .map(|d| d.join("binaries").join(format!("deno-{target_triple}")));
-
-        // Dev mode: binaries are relative to the src-tauri dir
-        let dev_deno = std::env::current_dir()
-            .ok()
-            .map(|d| d.join("binaries").join(format!("deno-{target_triple}")));
-
-        if let Some(ref p) = resource_deno {
-            if p.exists() { p.to_string_lossy().to_string() }
-            else if let Some(ref d) = dev_deno {
-                if d.exists() { d.to_string_lossy().to_string() }
-                else { "deno".to_string() }
-            } else { "deno".to_string() }
-        } else if let Some(ref d) = dev_deno {
-            if d.exists() { d.to_string_lossy().to_string() }
-            else { "deno".to_string() }
-        } else { "deno".to_string() }
-    };
+    let deno_path = resolve_deno_path(app, target_triple);
     eprintln!("[acp] Deno path: {deno_path}");
 
     // Write deno path into config so the agent can read it
@@ -97,16 +94,15 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
 
     eprintln!("[acp] Sidecar spawned successfully");
 
-    // Store child process
-    {
-        let mut state = agent_state().lock().await;
-        *state = Some(AgentProcess {
-            child,
-            session_id: None,
-            prompt_counter: 0,
-            app: app.clone(),
-        });
-    }
+    // Store child process while still holding lock
+    *state = Some(AgentProcess {
+        child,
+        prompt_counter: 0,
+        app: app.clone(),
+    });
+
+    // Release lock before spawning read task
+    drop(state);
 
     // Spawn task to read agent stdout and forward as Tauri events
     let app_clone = app.clone();
@@ -121,14 +117,10 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
                         let trimmed = s.trim();
                         if !trimmed.is_empty() {
                             eprintln!("[agent] {trimmed}");
-                            // Forward stderr to frontend debug panel too
                             let _ = app_clone.emit("agent-debug", json!({
                                 "direction": "agent-stderr",
                                 "message": trimmed,
-                                "timestamp": format!("{}", std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_secs()),
+                                "timestamp": chrono_now(),
                             }));
                         }
                     }
@@ -200,7 +192,8 @@ async fn write_to_agent_logged(app: &AppHandle, msg: &Value) -> Result<(), AcpEr
     let mut state = agent_state().lock().await;
     let agent = state.as_mut().ok_or(AcpError::NotConnected)?;
 
-    let line = format!("{}\n", serde_json::to_string(msg).unwrap());
+    let line = format!("{}\n", serde_json::to_string(msg)
+        .map_err(|e| AcpError::WriteError(format!("Failed to serialize message: {e}")))?);
     agent
         .child
         .write(line.as_bytes())

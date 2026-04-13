@@ -7,8 +7,9 @@ import { executeCode } from './tools/execute.js';
 import { TENDRIL_SYSTEM_PROMPT } from './prompt.js';
 import type { WorkspaceConfig } from './types.js';
 
-// Null printer — suppresses Strands' default stdout printing
-const nullPrinter = {
+// Null printer — suppresses Strands' default stdout printing.
+// Strands SDK expects { print, printNewline } but doesn't export a Printer type.
+const nullPrinter: { print: (...args: unknown[]) => void; printNewline: () => void } = {
   print: () => {},
   printNewline: () => {},
 };
@@ -27,7 +28,8 @@ export function createAgent(config: WorkspaceConfig, workspacePath: string): Age
   return new Agent({
     model,
     systemPrompt: TENDRIL_SYSTEM_PROMPT(workspacePath),
-    printer: nullPrinter as never,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Strands SDK doesn't export a Printer type
+    printer: nullPrinter as any,
     tools: [
       searchCapabilities(workspacePath),
       registerCapability(workspacePath),

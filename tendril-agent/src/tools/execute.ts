@@ -13,8 +13,15 @@ export const executeCode = (workspacePath: string) =>
       args: z.string().optional().describe('Optional JSON string of arguments object passed to the code'),
     }),
     callback: async ({ code, args }) => {
+      let parsedArgs: Record<string, unknown> = {};
+      if (args) {
+        try {
+          parsedArgs = JSON.parse(args);
+        } catch (err) {
+          throw new Error(`Failed to parse args: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       const { config } = readConfig(workspacePath);
-      const parsedArgs = args ? JSON.parse(args) : {};
       return executeDeno(
         code,
         parsedArgs,

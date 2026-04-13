@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 
+const MAX_DEBUG_LOG_ENTRIES = 500;
+
 let msgCounter = 0;
 function nextMsgId(): string {
   return `msg-${Date.now()}-${++msgCounter}`;
@@ -210,7 +212,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
               // Start new chunk group
               debugCounterRef.current += 1;
               return [
-                ...prev.slice(-500),
+                ...prev.slice(-MAX_DEBUG_LOG_ENTRIES),
                 { id: debugCounterRef.current, direction: 'agent→host', message: text, timestamp: event.payload.timestamp, _isChunkGroup: true } as DebugEntry & { _isChunkGroup: boolean },
               ];
             }
@@ -228,14 +230,14 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
               });
               debugCounterRef.current += 1;
               return [
-                ...closed.slice(-500),
+                ...closed.slice(-MAX_DEBUG_LOG_ENTRIES),
                 { id: debugCounterRef.current, direction: event.payload.direction, message: event.payload.message, timestamp: event.payload.timestamp },
               ];
             }
 
             debugCounterRef.current += 1;
             return [
-              ...prev.slice(-500),
+              ...prev.slice(-MAX_DEBUG_LOG_ENTRIES),
               { id: debugCounterRef.current, direction: event.payload.direction, message: event.payload.message, timestamp: event.payload.timestamp },
             ];
           });

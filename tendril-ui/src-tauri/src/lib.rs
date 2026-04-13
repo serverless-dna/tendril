@@ -5,6 +5,11 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+// Configuration defaults
+const DEFAULT_TIMEOUT_MS: u64 = 45_000;
+const DEFAULT_MAX_CAPABILITIES: u32 = 500;
+const DEFAULT_MAX_TURNS: u32 = 100;
+
 /// App-level config lives at ~/.tendril/config.json
 fn app_config_path() -> PathBuf {
     dirs::home_dir()
@@ -13,9 +18,30 @@ fn app_config_path() -> PathBuf {
         .join("config.json")
 }
 
+/// Get the configured workspace path, or None if not set
+fn configured_workspace() -> Option<String> {
+    read_app_config_inner()
+        .ok()
+        .and_then(|c| c.get("workspace").and_then(|w| w.as_str()).map(|s| s.to_string()))
+}
+
+/// Validate that a resolved path is within the workspace directory.
+/// Prevents path traversal attacks on file read/write commands.
+fn validate_within_workspace(target: &Path) -> Result<(), String> {
+    let workspace = configured_workspace()
+        .ok_or("Workspace not configured")?;
+    let workspace_canonical = fs::canonicalize(Path::new(&expand_tilde(&workspace)))
+        .map_err(|e| format!("Failed to resolve workspace path: {e}"))?;
+    let target_canonical = fs::canonicalize(target)
+        .map_err(|e| format!("Failed to resolve target path: {e}"))?;
+    if !target_canonical.starts_with(&workspace_canonical) {
+        return Err("Access denied: path is outside workspace".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
-async fn send_prompt(text: String, app: tauri::AppHandle) -> Result<(), String> {
-    let _ = &app;
+async fn send_prompt(text: String, _app: tauri::AppHandle) -> Result<(), String> {
     acp::send_prompt(&text).await.map_err(|e| e.to_string())
 }
 
@@ -52,17 +78,17 @@ async fn init_workspace(path: String) -> Result<(), String> {
     // Create workspace structure
     fs::create_dir_all(workspace.join("tools")).map_err(|e| e.to_string())?;
 
-    // Write empty registry
-    if !workspace.join("index.json").exists() {
-        fs::write(
-            workspace.join("index.json"),
-            serde_json::to_string_pretty(&serde_json::json!({
-                "version": "1.0.0",
-                "capabilities": []
-            }))
-            .unwrap(),
-        )
-        .map_err(|e| e.to_string())?;
+    // Write empty registry inside tools/
+    let tools_index = workspace.join("tools").join("index.json");
+    if !tools_index.exists() {
+        let index_json = serde_json::to_string_pretty(&serde_json::json!({
+            "version": "1.0.0",
+            "capabilities": []
+        }))
+        .map_err(|e| format!("Failed to serialize index: {e}"))?;
+
+        fs::write(&tools_index, index_json)
+            .map_err(|e| e.to_string())?;
     }
 
     // Read existing app config or create default, then set workspace path
@@ -77,7 +103,7 @@ async fn init_workspace(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn read_capabilities(path: String) -> Result<Vec<Value>, String> {
     let expanded = expand_tilde(&path);
-    let index_path = Path::new(&expanded).join("index.json");
+    let index_path = Path::new(&expanded).join("tools").join("index.json");
     if !index_path.exists() {
         return Ok(vec![]);
     }
@@ -155,6 +181,7 @@ async fn read_file_content(file_path: String) -> Result<String, String> {
     if !path.is_file() {
         return Err(format!("Not a file: {expanded}"));
     }
+    validate_within_workspace(path)?;
     // Limit to 1MB
     let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
     if metadata.len() > 1_048_576 {
@@ -164,7 +191,59 @@ async fn read_file_content(file_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
+    let expanded = expand_tilde(&path);
+    if !Path::new(&expanded).exists() {
+        return Err(format!("Path does not exist: {expanded}"));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn write_file_content(file_path: String, content: String) -> Result<(), String> {
+    let expanded = expand_tilde(&file_path);
+    let path = Path::new(&expanded);
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            return Err(format!("Parent directory does not exist: {}", parent.display()));
+        }
+    }
+    // For new files, validate parent is within workspace
+    if path.exists() {
+        validate_within_workspace(path)?;
+    } else if let Some(parent) = path.parent() {
+        validate_within_workspace(parent)?;
+    }
+    fs::write(path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn read_tool_source(workspace: String, name: String) -> Result<String, String> {
+    // Validate tool name is safe (snake_case only)
+    if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
+        return Err(format!("Invalid tool name: {name}. Only lowercase letters, digits, and underscores allowed."));
+    }
     let expanded = expand_tilde(&workspace);
     let tool_path = Path::new(&expanded).join("tools").join(format!("{name}.ts"));
     if !tool_path.exists() {
@@ -175,21 +254,44 @@ async fn read_tool_source(workspace: String, name: String) -> Result<String, Str
 
 #[tauri::command]
 async fn get_system_prompt() -> Result<String, String> {
-    let workspace = read_app_config_inner()
-        .ok()
-        .and_then(|c| c.get("workspace").and_then(|w| w.as_str()).map(|s| s.to_string()))
+    let workspace = configured_workspace()
         .unwrap_or_else(|| "~/tendril-workspace".to_string());
 
     Ok(format!(r#"You are Tendril, an agentic assistant with a self-extending toolkit.
 
 Your workspace is at {workspace}.
-Your capability registry is at {workspace}/index.json.
-Your tool implementations are at {workspace}/tools/*.ts.
+Your tool implementations and registry are at {workspace}/tools/ (index.json + *.ts files).
 
 BEFORE acting on any request:
 1. Call searchCapabilities(query) to check if a relevant tool exists
 2. If found: call loadTool(name) then execute(code, args)
-3. If NOT found: you MUST build the tool yourself. Write the TypeScript implementation and call registerCapability(definition, code) then execute it. Do NOT ask the user for permission to create tools. Do NOT explain that you need to create a tool. Just create it and use it.
+3. If NOT found: decide — is this a one-off or something the user might ask again?
+   - ONE-OFF (e.g. "read me that file", "what's in this directory"): use execute() with Deno built-ins directly
+   - REUSABLE (e.g. "fetch this API", "parse this format", "search these logs"): build a tool, register it, then execute it
+
+REUSE OVER DUPLICATION:
+- searchCapabilities() is not optional. It is step 1 of every task.
+- If a tool exists, use it. Do not rewrite it. Do not "improve" it.
+- If you find yourself writing the same kind of execute() code a second time, that's a signal to register it as a tool.
+- The registry is your memory. Tools you build today save time tomorrow.
+
+WHEN TO USE execute() DIRECTLY (no tool needed):
+These Deno built-ins are available inside execute() for simple one-off operations:
+- Deno.readTextFile(path) — read a file
+- Deno.readDir(path) — list directory contents
+- Deno.stat(path) — file metadata
+- Deno.writeTextFile(path, content) — write a file
+- fetch(url) — a single HTTP request with no parsing
+- console.log() — output results
+Use these for trivial, non-repeatable tasks. If the operation involves parsing, filtering, transforming, or any logic beyond a single API call, build a tool.
+
+WHEN TO BUILD AND REGISTER A TOOL:
+Build a tool when the task involves:
+- Calling an API and extracting specific data from the response
+- Parsing or transforming a data format (CSV, XML, logs, etc.)
+- Multi-step operations (fetch + parse + filter)
+- Anything the user is likely to ask for again, even with different inputs
+- Domain-specific logic (e.g. "check the status of X", "summarise Y")
 
 WHEN WRITING A CAPABILITY DEFINITION:
 - capability: one sentence, what the tool does, no trigger language
@@ -204,6 +306,14 @@ WHEN WRITING TOOL IMPLEMENTATIONS:
 - Output via console.log() — captured as tool result
 - Keep implementations focused and single-purpose
 
+OUTPUT DISCIPLINE:
+Tools must return ONLY the data needed to answer the user's question — nothing else.
+- Filter, extract, and reshape data inside the tool before outputting.
+- Never dump raw API responses, full file contents, or entire data structures when only a subset is needed.
+- If the user asks "what version?" the tool returns the version string, not the entire package.json.
+- If the user asks about errors in a log, the tool returns matching lines, not the full log.
+- Smaller outputs mean faster responses and less wasted context. Design every console.log() as if tokens cost money — because they do.
+
 SANDBOX:
 - Read/write scoped to {workspace}
 - fetch() available for any URL — use it to access APIs, web pages, etc.
@@ -212,8 +322,10 @@ SANDBOX:
 RULES:
 - ACT immediately. Do not narrate. Do not explain what you are about to do.
 - NEVER ask "would you like me to create a tool?" — if you need it, build it.
-- NEVER say "I don't have a tool for that" — build one and use it.
-- Check the registry first. Always. If nothing matches, build and register.
+- NEVER say "I don't have a tool for that" — use a built-in or build one.
+- NEVER answer from training data when a tool could get live information. Always try the tool first.
+- If a tool execution fails, read the error, fix the code, and retry. Do NOT fall back to answering from memory.
+- If the sandbox or Deno is unavailable, say so explicitly — do NOT pretend you have the answer.
 - You are autonomous. The user expects results, not questions about your process."#))
 }
 
@@ -228,11 +340,11 @@ fn default_app_config() -> Value {
         },
         "sandbox": {
             "denoPath": "deno",
-            "timeoutMs": 45000,
+            "timeoutMs": DEFAULT_TIMEOUT_MS,
             "allowedDomains": []
         },
-        "registry": { "maxCapabilities": 500 },
-        "agent": { "maxTurns": 100 }
+        "registry": { "maxCapabilities": DEFAULT_MAX_CAPABILITIES },
+        "agent": { "maxTurns": DEFAULT_MAX_TURNS }
     })
 }
 
@@ -247,9 +359,12 @@ fn read_app_config_inner() -> Result<Value, String> {
 
 fn write_app_config_inner(config: &Value) -> Result<(), String> {
     let path = app_config_path();
-    fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-    fs::write(&path, serde_json::to_string_pretty(config).unwrap())
-        .map_err(|e| e.to_string())?;
+    let parent = path.parent()
+        .ok_or("Config path has no parent directory")?;
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let config_str = serde_json::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
+    fs::write(&path, config_str).map_err(|e| e.to_string())?;
     eprintln!("[config] Saved to {}", path.display());
     Ok(())
 }
@@ -269,6 +384,8 @@ pub fn run() {
             read_tool_source,
             list_directory,
             read_file_content,
+            write_file_content,
+            reveal_in_file_explorer,
             read_config,
             write_config,
             get_system_prompt,

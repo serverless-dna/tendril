@@ -1,16 +1,10 @@
-import React, { useState } from 'react';
-
-interface SettingsConfig {
-  workspace?: string;
-  model: { modelId: string; region: string; profile?: string };
-  sandbox: { timeoutMs: number; allowedDomains?: string[] };
-  agent: { maxTurns: number };
-}
+import React, { useState, useRef, useEffect } from 'react';
+import type { AppConfig } from '../types';
 
 interface SettingsPanelProps {
-  config: SettingsConfig;
+  config: AppConfig;
   systemPrompt: string;
-  onSave: (config: Partial<SettingsConfig>) => void;
+  onSave: (config: Partial<AppConfig>) => void;
 }
 
 export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelProps) {
@@ -23,6 +17,11 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
   );
   const [maxTurns, setMaxTurns] = useState(config.agent?.maxTurns ?? 100);
   const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => { clearTimeout(savedTimerRef.current); };
+  }, []);
 
   const handleSave = () => {
     onSave({
@@ -31,7 +30,8 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
       agent: { maxTurns },
     });
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
   };
 
   return (

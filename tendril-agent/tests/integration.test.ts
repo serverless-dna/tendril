@@ -6,11 +6,11 @@ import * as os from 'node:os';
 
 function createTempWorkspace(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tendril-int-'));
+  fs.mkdirSync(path.join(dir, 'tools'));
   fs.writeFileSync(
-    path.join(dir, 'index.json'),
+    path.join(dir, 'tools', 'index.json'),
     JSON.stringify({ version: '1.0.0', capabilities: [] }),
   );
-  fs.mkdirSync(path.join(dir, 'tools'));
   fs.mkdirSync(path.join(dir, '.tendril'), { recursive: true });
   fs.writeFileSync(
     path.join(dir, '.tendril', 'config.json'),

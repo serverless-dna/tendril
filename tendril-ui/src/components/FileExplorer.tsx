@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { CodeEditor } from './CodeEditor';
 
 interface FileEntry {
   name: string;
@@ -30,37 +31,6 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)}MB`;
 }
 
-function highlightCode(code: string, filename: string): React.ReactNode[] {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  if (ext !== 'ts' && ext !== 'js') {
-    return [<span key="0">{code}</span>];
-  }
-
-  const keywords = /\b(const|let|var|function|return|if|else|for|while|import|export|from|async|await|try|catch|throw|new|typeof|instanceof|class|extends|interface|type|as|in|of|void|null|undefined|true|false)\b/g;
-  const strings = /(["'`])(?:(?!\1|\\).|\\.)*?\1/g;
-  const comments = /(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
-  const numbers = /\b(\d+\.?\d*)\b/g;
-
-  const tokens: Array<{ index: number; length: number; cls: string; text: string }> = [];
-  for (const m of code.matchAll(comments)) tokens.push({ index: m.index!, length: m[0].length, cls: 'text-gray-500 italic', text: m[0] });
-  for (const m of code.matchAll(strings)) tokens.push({ index: m.index!, length: m[0].length, cls: 'text-green-400', text: m[0] });
-  for (const m of code.matchAll(keywords)) tokens.push({ index: m.index!, length: m[0].length, cls: 'text-purple-400', text: m[0] });
-  for (const m of code.matchAll(numbers)) tokens.push({ index: m.index!, length: m[0].length, cls: 'text-orange-400', text: m[0] });
-
-  tokens.sort((a, b) => a.index - b.index || b.length - a.length);
-
-  const parts: React.ReactNode[] = [];
-  let last = 0;
-  for (const t of tokens) {
-    if (t.index < last) continue;
-    if (t.index > last) parts.push(<span key={`p${last}`}>{code.slice(last, t.index)}</span>);
-    parts.push(<span key={`t${t.index}`} className={t.cls}>{t.text}</span>);
-    last = t.index + t.length;
-  }
-  if (last < code.length) parts.push(<span key={`p${last}`}>{code.slice(last)}</span>);
-  return parts;
-}
-
 interface FileExplorerProps {
   workspacePath: string;
 }
@@ -68,9 +38,14 @@ interface FileExplorerProps {
 export function FileExplorer({ workspacePath }: FileExplorerProps) {
   const [currentPath, setCurrentPath] = useState(workspacePath);
   const [entries, setEntries] = useState<FileEntry[]>([]);
-  const [selectedFile, setSelectedFile] = useState<{ name: string; content: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ name: string; path: string; content: string } | null>(null);
+  const [editedContent, setEditedContent] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const editorContentRef = useRef<string | null>(null);
+
+  const isDirty = editedContent !== null && selectedFile !== null && editedContent !== selectedFile.content;
 
   const loadDirectory = useCallback(async (dirPath: string) => {
     setLoading(true);
@@ -80,6 +55,8 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
       setEntries(result);
       setCurrentPath(dirPath);
       setSelectedFile(null);
+      setEditedContent(null);
+      editorContentRef.current = null;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -97,12 +74,47 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
     } else {
       try {
         const content = await invoke<string>('read_file_content', { filePath: entry.path });
-        setSelectedFile({ name: entry.name, content });
+        setSelectedFile({ name: entry.name, path: entry.path, content });
+        setEditedContent(null);
+        editorContentRef.current = null;
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     }
   };
+
+  const handleSave = useCallback(async () => {
+    if (!selectedFile || editorContentRef.current === null) return;
+    const content = editorContentRef.current;
+    setSaving(true);
+    try {
+      await invoke('write_file_content', { filePath: selectedFile.path, content });
+      setSelectedFile({ ...selectedFile, content });
+      setEditedContent(null);
+      editorContentRef.current = null;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedFile]);
+
+  const handleChange = useCallback((value: string) => {
+    editorContentRef.current = value;
+    setEditedContent(value);
+  }, []);
+
+  // Ctrl/Cmd+S to save
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleSave]);
 
   const goUp = () => {
     const parent = currentPath.split('/').slice(0, -1).join('/');
@@ -113,16 +125,34 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
 
   const breadcrumbs = currentPath.replace(workspacePath, '').split('/').filter(Boolean);
 
+  const openInExplorer = () => {
+    const target = selectedFile ? selectedFile.path.split('/').slice(0, -1).join('/') : currentPath;
+    invoke('reveal_in_file_explorer', { path: target });
+  };
+
+  // Show the workspace folder name (last segment of the path)
+  const workspaceName = workspacePath.split('/').filter(Boolean).pop() ?? 'workspace';
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Workspace</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{workspaceName}</h2>
+          <p className="text-xs font-mono text-gray-500 truncate">{workspacePath}</p>
+        </div>
+        <button
+          onClick={openInExplorer}
+          title="Open in file explorer"
+          className="text-xs px-2 py-1 text-gray-400 hover:text-gray-200 border border-gray-700 rounded hover:border-gray-500 transition-colors"
+        >
+          Open in Finder
+        </button>
       </div>
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-1 px-4 py-2 text-xs font-mono text-gray-500 border-b border-gray-800 bg-gray-900/50 overflow-x-auto">
         <button onClick={() => loadDirectory(workspacePath)} className="hover:text-gray-300 flex-shrink-0">
-          ~/workspace
+          {workspaceName}
         </button>
         {breadcrumbs.map((crumb, i) => (
           <React.Fragment key={i}>
@@ -137,7 +167,7 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
         ))}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* File tree */}
         <div className="w-64 flex-shrink-0 border-r border-gray-800 overflow-y-auto">
           {currentPath !== workspacePath && (
@@ -172,22 +202,33 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
         </div>
 
         {/* File content */}
-        <div className="flex-1 overflow-auto bg-gray-950">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-gray-950">
           {selectedFile ? (
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono text-gray-500">{selectedFile.name}</span>
-                <button
-                  onClick={() => navigator.clipboard.writeText(selectedFile.content)}
-                  className="text-xs text-gray-500 hover:text-gray-300"
-                >
-                  Copy
-                </button>
+            <>
+              <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-gray-500">{selectedFile.name}</span>
+                  {isDirty && <span className="text-xs text-yellow-500">modified</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isDirty && (
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : 'Save'}
+                    </button>
+                  )}
+                </div>
               </div>
-              <pre className="text-sm font-mono leading-relaxed whitespace-pre-wrap text-gray-300">
-                {highlightCode(selectedFile.content, selectedFile.name)}
-              </pre>
-            </div>
+              <CodeEditor
+                value={selectedFile.content}
+                filename={selectedFile.name}
+                onChange={handleChange}
+                className="flex-1 min-h-0 overflow-hidden"
+              />
+            </>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-600 text-sm">
               Select a file to view its contents

@@ -3,6 +3,11 @@ import { createAgent } from './agent.js';
 import { startProtocolLoop, emitUpdate } from './protocol.js';
 import type { ProtocolContext } from './protocol.js';
 
+// Claude Sonnet 4.5 pricing (USD per token)
+const INPUT_COST_PER_TOKEN = 0.000003;
+const OUTPUT_COST_PER_TOKEN = 0.000015;
+const MODEL_CONTEXT_LIMIT = 200_000;
+
 // Guard stdout — only allow JSON writes. Strands SDK sometimes writes raw text.
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 process.stdout.write = function(chunk: string | Uint8Array, ...args: unknown[]): boolean {
@@ -177,8 +182,8 @@ function emitTurnEnd(): void {
     duration_ms: durationMs,
   });
 
-  const inputCost = inputTokens * 0.000003;
-  const outputCost = outputTokens * 0.000015;
+  const inputCost = inputTokens * INPUT_COST_PER_TOKEN;
+  const outputCost = outputTokens * OUTPUT_COST_PER_TOKEN;
 
   emitUpdate({
     sessionUpdate: 'query_result',
@@ -190,7 +195,7 @@ function emitTurnEnd(): void {
     total_tokens: totalTokens,
     duration_ms: durationMs,
     context_tokens: inputTokens,
-    context_limit: 200000,
+    context_limit: MODEL_CONTEXT_LIMIT,
   });
 
   emitUpdate({

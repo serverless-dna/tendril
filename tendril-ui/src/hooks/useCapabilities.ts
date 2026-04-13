@@ -1,16 +1,6 @@
 import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-
-interface Capability {
-  name: string;
-  capability: string;
-  triggers: string[];
-  suppression: string[];
-  tool_path: string;
-  created: string;
-  created_by: string;
-  version: string;
-}
+import type { Capability } from '../types';
 
 export function useCapabilities(workspacePath: string) {
   const [capabilities, setCapabilities] = useState<Capability[]>([]);

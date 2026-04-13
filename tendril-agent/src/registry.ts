@@ -2,20 +2,32 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { CapabilityDefinition, CapabilityIndex } from './types.js';
 
+const VALID_TOOL_NAME = /^[a-z0-9_]+$/;
+
 export class CapabilityRegistry {
   private indexPath: string;
   private toolsPath: string;
 
   constructor(workspacePath: string) {
-    this.indexPath = path.join(workspacePath, 'index.json');
     this.toolsPath = path.join(workspacePath, 'tools');
+    this.indexPath = path.join(this.toolsPath, 'index.json');
+  }
+
+  private validateName(name: string): void {
+    if (!VALID_TOOL_NAME.test(name)) {
+      throw new Error(`Invalid tool name: '${name}'. Only lowercase letters, digits, and underscores allowed.`);
+    }
   }
 
   private loadIndex(): CapabilityIndex {
     if (!fs.existsSync(this.indexPath)) {
       return { version: '1.0.0', capabilities: [] };
     }
-    return JSON.parse(fs.readFileSync(this.indexPath, 'utf-8'));
+    try {
+      return JSON.parse(fs.readFileSync(this.indexPath, 'utf-8'));
+    } catch (err) {
+      throw new Error(`Failed to parse registry index: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private saveIndex(index: CapabilityIndex): void {
@@ -38,11 +50,12 @@ export class CapabilityRegistry {
   }
 
   register(definition: Omit<CapabilityDefinition, 'tool_path' | 'created' | 'created_by' | 'version'>, code: string): void {
+    this.validateName(definition.name);
     const index = this.loadIndex();
 
     const fullDef: CapabilityDefinition = {
       ...definition,
-      tool_path: `tools/${definition.name}.ts`,
+      tool_path: `${definition.name}.ts`,
       created: new Date().toISOString().split('T')[0],
       created_by: 'model',
       version: '1.0.0',
@@ -64,6 +77,7 @@ export class CapabilityRegistry {
   }
 
   load(name: string): string {
+    this.validateName(name);
     const filePath = path.join(this.toolsPath, `${name}.ts`);
     if (!fs.existsSync(filePath)) {
       throw new Error(`Tool not found: ${name}`);

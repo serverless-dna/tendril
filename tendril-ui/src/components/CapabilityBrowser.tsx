@@ -1,76 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-
-interface Capability {
-  name: string;
-  capability: string;
-  triggers: string[];
-  suppression: string[];
-  tool_path: string;
-  created: string;
-  created_by: string;
-}
+import { CodeEditor } from './CodeEditor';
+import type { Capability } from '../types';
 
 interface CapabilityBrowserProps {
   capabilities: Capability[];
   loading: boolean;
   onRefresh: () => void;
   workspacePath: string;
-}
-
-function highlightTypeScript(code: string): React.ReactNode[] {
-  const keywords = /\b(const|let|var|function|return|if|else|for|while|import|export|from|async|await|try|catch|throw|new|typeof|instanceof|class|extends|interface|type|as|in|of|switch|case|break|default|continue|do|void|null|undefined|true|false)\b/g;
-  const strings = /(["'`])(?:(?!\1|\\).|\\.)*?\1/g;
-  const comments = /(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
-  const numbers = /\b(\d+\.?\d*)\b/g;
-
-  // Simple approach: split by tokens and colorize
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  const tokens: Array<{ index: number; length: number; type: string; text: string }> = [];
-
-  // Collect all tokens
-  for (const match of code.matchAll(comments)) {
-    tokens.push({ index: match.index!, length: match[0].length, type: 'comment', text: match[0] });
-  }
-  for (const match of code.matchAll(strings)) {
-    tokens.push({ index: match.index!, length: match[0].length, type: 'string', text: match[0] });
-  }
-  for (const match of code.matchAll(keywords)) {
-    tokens.push({ index: match.index!, length: match[0].length, type: 'keyword', text: match[0] });
-  }
-  for (const match of code.matchAll(numbers)) {
-    tokens.push({ index: match.index!, length: match[0].length, type: 'number', text: match[0] });
-  }
-
-  // Sort by position, longest match first for overlaps
-  tokens.sort((a, b) => a.index - b.index || b.length - a.length);
-
-  // Render non-overlapping tokens
-  const colors: Record<string, string> = {
-    keyword: 'text-purple-400',
-    string: 'text-green-400',
-    comment: 'text-gray-500 italic',
-    number: 'text-orange-400',
-  };
-
-  for (const token of tokens) {
-    if (token.index < lastIndex) continue; // skip overlapping
-    if (token.index > lastIndex) {
-      parts.push(<span key={`p${lastIndex}`}>{code.slice(lastIndex, token.index)}</span>);
-    }
-    parts.push(
-      <span key={`t${token.index}`} className={colors[token.type]}>
-        {token.text}
-      </span>,
-    );
-    lastIndex = token.index + token.length;
-  }
-  if (lastIndex < code.length) {
-    parts.push(<span key={`p${lastIndex}`}>{code.slice(lastIndex)}</span>);
-  }
-
-  return parts;
 }
 
 function CapabilityCard({ cap, workspacePath }: { cap: Capability; workspacePath: string }) {
@@ -143,8 +80,8 @@ function CapabilityCard({ cap, workspacePath }: { cap: Capability; workspacePath
           )}
 
           {/* Source code */}
-          <div className="bg-gray-950 p-4 overflow-x-auto">
-            <div className="flex items-center justify-between mb-2">
+          <div className="bg-gray-950 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2">
               <span className="text-xs text-gray-500 font-mono">{cap.tool_path ?? `tools/${cap.name}.ts`}</span>
               {source && (
                 <button
@@ -159,13 +96,16 @@ function CapabilityCard({ cap, workspacePath }: { cap: Capability; workspacePath
               )}
             </div>
             {loading ? (
-              <div className="text-gray-500 text-sm animate-pulse">Loading source...</div>
+              <div className="px-4 pb-4 text-gray-500 text-sm animate-pulse">Loading source...</div>
             ) : source ? (
-              <pre className="text-sm font-mono leading-relaxed whitespace-pre-wrap text-gray-300">
-                {highlightTypeScript(source)}
-              </pre>
+              <CodeEditor
+                value={source}
+                filename={`${cap.name}.ts`}
+                readOnly
+                className="max-h-96"
+              />
             ) : (
-              <div className="text-gray-500 text-sm">No source available</div>
+              <div className="px-4 pb-4 text-gray-500 text-sm">No source available</div>
             )}
           </div>
         </div>
@@ -177,7 +117,7 @@ function CapabilityCard({ cap, workspacePath }: { cap: Capability; workspacePath
 export function CapabilityBrowser({ capabilities, loading, onRefresh, workspacePath }: CapabilityBrowserProps) {
   useEffect(() => {
     onRefresh();
-  }, []);
+  }, [onRefresh]);
 
   return (
     <div className="flex flex-col h-full">
