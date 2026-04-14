@@ -6,7 +6,7 @@ export const searchCapabilities = (workspacePath: string) =>
   tool({
     name: 'searchCapabilities',
     description:
-      'Search the capability registry for existing tools. You MUST call this before writing ANY code. Skipping this step and writing code directly is a failure mode — it causes duplicate tools.',
+      'STEP 1 of every request. Search the registry for an existing tool. If results are empty, you MUST call registerCapability next — never call execute without a registered tool.',
     inputSchema: z.object({
       query: z.string().describe('What capability to search for'),
     }),

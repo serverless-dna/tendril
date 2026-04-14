@@ -6,7 +6,7 @@ export const registerCapability = (workspacePath: string) =>
   tool({
     name: 'registerCapability',
     description:
-      'Register a new Agency Capability definition and store its TypeScript implementation to the registry.',
+      'STEP 2b: When searchCapabilities returns no results, register a NEW tool before executing. Write the definition and TypeScript code. After registering, call execute() with the same code.',
     inputSchema: z.object({
       definition: z.object({
         name: z.string().describe('snake_case tool name'),

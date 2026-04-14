@@ -7,7 +7,7 @@ export const executeCode = (workspacePath: string) =>
   tool({
     name: 'execute',
     description:
-      'Execute TypeScript code in the Deno sandbox. Output via console.log() is returned as the result.',
+      'Execute a registered tool in the Deno sandbox. Use loadTool() to get the code first. Do NOT write code inline — register it with registerCapability() first, then execute it.',
     inputSchema: z.object({
       code: z.string().describe('TypeScript code to execute'),
       args: z.string().optional().describe('Optional JSON string of arguments object passed to the code'),
