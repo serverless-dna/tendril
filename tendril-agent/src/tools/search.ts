@@ -11,8 +11,15 @@ export const searchCapabilities = (workspacePath: string) =>
       query: z.string().describe('What capability to search for'),
     }),
     callback: ({ query }) => {
-      const registry = new CapabilityRegistry(workspacePath);
-      const results = registry.search(query);
-      return JSON.stringify(results, null, 2);
+      try {
+        const registry = new CapabilityRegistry(workspacePath);
+        const results = registry.search(query);
+        if (results.length === 0) {
+          return 'No tools found. You MUST call registerCapability to create one.';
+        }
+        return JSON.stringify(results, null, 2);
+      } catch {
+        return 'Registry empty or not initialised. You MUST call registerCapability to create a tool.';
+      }
     },
   });
