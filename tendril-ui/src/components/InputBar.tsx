@@ -1,13 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 
 interface InputBarProps {
   onSubmit: (text: string) => void;
   onCancel: () => void;
   isProcessing: boolean;
+  draft: string;
+  onDraftChange: (text: string) => void;
 }
 
-export function InputBar({ onSubmit, onCancel, isProcessing }: InputBarProps) {
-  const [text, setText] = useState('');
+export function InputBar({ onSubmit, onCancel, isProcessing, draft, onDraftChange }: InputBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -22,13 +23,13 @@ export function InputBar({ onSubmit, onCancel, isProcessing }: InputBarProps) {
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [text]);
+  }, [draft]);
 
   const handleSubmit = () => {
-    const trimmed = text.trim();
+    const trimmed = draft.trim();
     if (!trimmed || isProcessing) return;
     onSubmit(trimmed);
-    setText('');
+    onDraftChange('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -42,8 +43,8 @@ export function InputBar({ onSubmit, onCancel, isProcessing }: InputBarProps) {
     <div className="flex items-end gap-2 p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
       <textarea
         ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
+        value={draft}
+        onChange={(e) => onDraftChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={isProcessing ? 'Processing...' : 'Type a message... (Shift+Enter for new line)'}
         autoCapitalize="off"
@@ -62,7 +63,7 @@ export function InputBar({ onSubmit, onCancel, isProcessing }: InputBarProps) {
       ) : (
         <button
           onClick={handleSubmit}
-          disabled={!text.trim()}
+          disabled={!draft.trim()}
           className="rounded-lg bg-blue-600 px-4 py-3 text-sm text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 flex-shrink-0"
         >
           Send

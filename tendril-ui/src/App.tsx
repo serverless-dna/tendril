@@ -19,6 +19,7 @@ function AppContent() {
   const [workspacePath, setWorkspacePath] = useState('');
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [chatDraft, setChatDraft] = useState('');
   const { capabilities, loading: capsLoading, refresh: refreshCaps } = useCapabilities(workspacePath);
 
   useEffect(() => {
@@ -119,7 +120,7 @@ function AppContent() {
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 overflow-hidden">
-          {activeTab === 'chat' && <ChatView />}
+          {activeTab === 'chat' && <ChatView draft={chatDraft} onDraftChange={setChatDraft} />}
           {activeTab === 'capabilities' && (
             <CapabilityBrowser
               capabilities={capabilities}

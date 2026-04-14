@@ -6,7 +6,12 @@ import { TokenUsage } from './TokenUsage';
 import { InputBar } from './InputBar';
 import { TendrilLogo } from './TendrilLogo';
 
-export function ChatView() {
+interface ChatViewProps {
+  draft: string;
+  onDraftChange: (text: string) => void;
+}
+
+export function ChatView({ draft, onDraftChange }: ChatViewProps) {
   const { messages, isProcessing, connectionStatus, error, sendPrompt, cancelPrompt } = useAgent();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -76,7 +81,7 @@ export function ChatView() {
       </div>
 
       {/* Input */}
-      <InputBar onSubmit={sendPrompt} onCancel={cancelPrompt} isProcessing={isProcessing} />
+      <InputBar onSubmit={sendPrompt} onCancel={cancelPrompt} isProcessing={isProcessing} draft={draft} onDraftChange={onDraftChange} />
     </div>
   );
 }

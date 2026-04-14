@@ -192,8 +192,9 @@ async fn read_file_content(file_path: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
-    let expanded = expand_tilde(&path);
-    if !Path::new(&expanded).exists() {
+    let is_url = path.starts_with("http://") || path.starts_with("https://");
+    let expanded = if is_url { path.clone() } else { expand_tilde(&path) };
+    if !is_url && !Path::new(&expanded).exists() {
         return Err(format!("Path does not exist: {expanded}"));
     }
     #[cfg(target_os = "macos")]

@@ -9,10 +9,13 @@ All notable changes to the Tendril project will be documented in this file.
 - Editable files in workspace with save support (Cmd+S and Save button, dirty state indicator)
 - Language support: TypeScript/JSX, JSON, Markdown, Rust via CodeMirror extensions
 - `write_file_content` Tauri command for saving file edits from the UI
-- `reveal_in_file_explorer` Tauri command to open workspace folders in OS file manager
+- `reveal_in_file_explorer` Tauri command to open workspace folders and URLs in OS
 - Shared `types.ts` for `Capability` and `AppConfig` interfaces used across UI components
 - `validate_within_workspace()` path traversal guard on all Rust file read/write commands
 - Tool name validation (snake_case only) in both Rust and TypeScript registries
+- Markdown doc/code view toggle in workspace file explorer (eye icon for rendered, `<>` for source)
+- Chat draft text persists across tab switches (lifted to App state)
+- Global `window.open` interceptor routes all external links through OS browser via Tauri
 
 ### Changed
 - Agent system prompt: toolsmith identity — default is BUILD A TOOL, raw execute() restricted to single-line file reads only
