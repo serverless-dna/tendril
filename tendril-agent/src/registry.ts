@@ -1,4 +1,4 @@
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CapabilityDefinition, CapabilityIndex } from './types.js';
 
@@ -19,29 +19,30 @@ export class CapabilityRegistry {
     }
   }
 
-  private loadIndex(): CapabilityIndex {
-    if (!fs.existsSync(this.indexPath)) {
-      return { version: '1.0.0', capabilities: [] };
-    }
+  private async loadIndex(): Promise<CapabilityIndex> {
     try {
-      const raw = JSON.parse(fs.readFileSync(this.indexPath, 'utf-8'));
+      const raw = JSON.parse(await fs.readFile(this.indexPath, 'utf-8'));
       // Ensure capabilities array exists even if index.json is malformed
       if (!Array.isArray(raw?.capabilities)) {
         return { version: raw?.version ?? '1.0.0', capabilities: [] };
       }
       return raw as CapabilityIndex;
-    } catch {
-      // Corrupted index — treat as empty rather than crashing
+    } catch (err: unknown) {
+      // File not found or corrupted — treat as empty rather than crashing
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { version: '1.0.0', capabilities: [] };
+      }
+      // Corrupted JSON — treat as empty
       return { version: '1.0.0', capabilities: [] };
     }
   }
 
-  private saveIndex(index: CapabilityIndex): void {
-    fs.writeFileSync(this.indexPath, JSON.stringify(index, null, 2));
+  private async saveIndex(index: CapabilityIndex): Promise<void> {
+    await fs.writeFile(this.indexPath, JSON.stringify(index, null, 2));
   }
 
-  search(query: string): CapabilityDefinition[] {
-    const index = this.loadIndex();
+  async search(query: string): Promise<CapabilityDefinition[]> {
+    const index = await this.loadIndex();
     const terms = query.toLowerCase().split(/\s+/);
 
     return index.capabilities
@@ -55,9 +56,9 @@ export class CapabilityRegistry {
       .map(({ cap }) => cap);
   }
 
-  register(definition: Omit<CapabilityDefinition, 'tool_path' | 'created' | 'created_by' | 'version'>, code: string): void {
+  async register(definition: Omit<CapabilityDefinition, 'tool_path' | 'created' | 'created_by' | 'version'>, code: string): Promise<void> {
     this.validateName(definition.name);
-    const index = this.loadIndex();
+    const index = await this.loadIndex();
 
     const fullDef: CapabilityDefinition = {
       ...definition,
@@ -74,28 +75,19 @@ export class CapabilityRegistry {
       index.capabilities.push(fullDef);
     }
 
-    this.saveIndex(index);
+    await this.saveIndex(index);
 
-    if (!fs.existsSync(this.toolsPath)) {
-      fs.mkdirSync(this.toolsPath, { recursive: true });
+    try {
+      await fs.access(this.toolsPath);
+    } catch {
+      await fs.mkdir(this.toolsPath, { recursive: true });
     }
-    fs.writeFileSync(path.join(this.toolsPath, `${definition.name}.ts`), code);
+    await fs.writeFile(path.join(this.toolsPath, `${definition.name}.ts`), code);
   }
 
-  load(name: string): string {
+  async load(name: string): Promise<string> {
     this.validateName(name);
     const filePath = path.join(this.toolsPath, `${name}.ts`);
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Tool not found: ${name}`);
-    }
-    return fs.readFileSync(filePath, 'utf-8');
-  }
-
-  list(): CapabilityDefinition[] {
-    return this.loadIndex().capabilities;
-  }
-
-  exists(name: string): boolean {
-    return this.loadIndex().capabilities.some((c) => c.name === name);
+    return fs.readFile(filePath, 'utf-8');
   }
 }

@@ -4,7 +4,7 @@ import type { AppConfig } from '../types';
 interface SettingsPanelProps {
   config: AppConfig;
   systemPrompt: string;
-  onSave: (config: Partial<AppConfig>) => void;
+  onSave: (config: Partial<AppConfig>) => Promise<void>;
 }
 
 export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelProps) {
@@ -17,21 +17,37 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
   );
   const [maxTurns, setMaxTurns] = useState(config.agent?.maxTurns ?? 100);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     return () => { clearTimeout(savedTimerRef.current); };
   }, []);
 
-  const handleSave = () => {
-    onSave({
-      model: { modelId, region, profile: profile || undefined },
-      sandbox: { timeoutMs, allowedDomains: networkUnrestricted ? [] : config.sandbox?.allowedDomains ?? [] },
-      agent: { maxTurns },
-    });
-    setSaved(true);
-    clearTimeout(savedTimerRef.current);
-    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+  // Sync form state when config prop changes externally
+  useEffect(() => {
+    setModelId(config.model?.modelId ?? '');
+    setRegion(config.model?.region ?? '');
+    setProfile(config.model?.profile ?? '');
+    setTimeoutMs(config.sandbox?.timeoutMs ?? 45000);
+    setNetworkUnrestricted(!config.sandbox?.allowedDomains || config.sandbox.allowedDomains.length === 0);
+    setMaxTurns(config.agent?.maxTurns ?? 100);
+  }, [config]);
+
+  const handleSave = async () => {
+    try {
+      setSaveError(null);
+      await onSave({
+        model: { modelId, region, profile: profile || undefined },
+        sandbox: { timeoutMs, allowedDomains: networkUnrestricted ? [] : config.sandbox?.allowedDomains ?? [] },
+        agent: { maxTurns },
+      });
+      setSaved(true);
+      clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   return (
@@ -153,6 +169,7 @@ export function SettingsPanel({ config, systemPrompt, onSave }: SettingsPanelPro
             Save & Restart Agent
           </button>
           {saved && <span className="text-sm text-green-400">Saved!</span>}
+          {saveError && <span className="text-sm text-red-400">{saveError}</span>}
         </div>
 
         <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">

@@ -5,6 +5,20 @@ All notable changes to the Tendril project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- React error boundary at top level — prevents white-screen crashes, shows error + reload button
+- `connection-status` Tauri event for agent lifecycle (connected, disconnected, reconnecting, error)
+- Connection status listener in AgentContext — UI reflects agent state changes in real time
+- Auto-reconnect on agent crash — backend emits `reconnecting` status, frontend triggers `connect_agent_cmd`
+- `isChunkGroup` optional field on `DebugEntry` interface (replaces type-unsafe `_isChunkGroup` escape hatch)
+- Config schema validation on `write_config` — rejects invalid types and dangerous workspace paths
+- Path validation on `init_workspace` — rejects `/`, `/etc`, `/usr`, `/var`, `/System`, and `..` traversal
+- System prompt shared file at `{workspace}/system-prompt.txt` — written by agent, read by Rust backend
+- Zod schema for `WorkspaceConfig` in agent — single source of truth for config defaults and validation
+- Save confirmation dialog in workspace file explorer before overwriting files
+- File click debounce in workspace file explorer — prevents overlapping async reads on rapid clicks
+- Settings panel error display — save/restart errors now shown inline instead of silently swallowed
+- `writeSystemPrompt()` function in agent — writes prompt to shared file on startup
+
 - GitHub Actions quality gate workflow — runs format, lint, and test on every PR and branch push
 - GitHub Actions release workflow — manual trigger from main with semver tag, builds Tauri app, publishes GitHub Release
 - PR template with Summary and Test Plan sections
@@ -22,6 +36,28 @@ All notable changes to the Tendril project will be documented in this file.
 - Global `window.open` interceptor routes all external links through OS browser via Tauri
 
 ### Changed
+- All Tauri `async fn` commands now use `tokio::fs` — zero synchronous `std::fs` calls in async context
+- All agent file I/O now uses `fs.promises` — zero `readFileSync`/`writeFileSync`/`existsSync` calls
+- Agent process state migrated from global `OnceLock<Mutex<Option<AgentProcess>>>` to Tauri managed state (`Arc<Mutex<>>` via `app.manage()`)
+- `reveal_in_file_explorer` hardened: HTTPS-only URLs opened in browser, file paths validated within workspace and revealed via `open --reveal` (macOS) instead of executed
+- `window.open` override now rejects non-HTTPS URLs at frontend layer
+- `list_directory` and `read_capabilities` now validate paths within workspace before reading
+- `CapabilityRegistry` instantiated once as singleton in `agent.ts`, shared across all tool callbacks via closure
+- Tool factories (`searchCapabilities`, `registerCapability`, `loadTool`) accept registry instance instead of workspace path
+- `executeCode` tool accepts config via closure — no longer re-reads `~/.tendril/config.json` on every execution
+- `readConfig` converted to async with zod schema validation (replaces `as string ??` coercion chains)
+- `SettingsPanel.onSave` prop type changed from `void` to `Promise<void>` — errors now propagate to UI
+- Settings panel syncs form state when config prop changes externally (via `useEffect`)
+- `deepMerge` replaced with typed field-level merge for `AppConfig` in App.tsx
+- `APPEND_TEXT` reducer simplified with documented state machine (3 clear cases with comments)
+- `msgCounter` moved from module-level `let` to inline `Date.now() + Math.random()` in reducer (no module state)
+- `lastToolCallId` moved from module-level variable to per-turn local in `onPrompt` handler
+- `useEffect` cleanup in AgentContext uses `AbortController` pattern — prevents listener registration after unmount
+- Sandbox temp files use `crypto.randomUUID()` filename in `os.tmpdir()` instead of predictable name in workspace
+- Markdown doc view now renders `editedContent` instead of stale `selectedFile.content`
+- `get_system_prompt` Rust command reads from `{workspace}/system-prompt.txt` instead of hardcoded string
+- Redundant `refreshCaps` call removed from capabilities tab click handler (component loads on mount via `useEffect`)
+
 - Agent system prompt: toolsmith identity — default is BUILD A TOOL, raw execute() restricted to single-line file reads only
 - Capability registry index.json moved from workspace root into tools/ directory (co-located with implementations)
 - Workspace tab header now shows real folder name and full path instead of "~/workspace"
@@ -51,6 +87,18 @@ All notable changes to the Tendril project will be documented in this file.
 - Unused `app` parameter in `send_prompt` Rust command
 
 ### Removed
+- `uuid` crate from Cargo.toml (was unused)
+- `_app` parameter from `send_prompt` Tauri command (was unused)
+- `write_to_agent` wrapper function from acp.rs — callers use `write_to_agent_logged` directly
+- `CapabilityRegistry.exists()` and `CapabilityRegistry.list()` methods (were unused)
+- Hardcoded system prompt from `lib.rs` `get_system_prompt` (moved to shared file written by agent)
+- `_isChunkGroup` type assertion escape hatch from AgentContext debug log
+- `deepMerge` function from App.tsx (replaced with typed merge)
+- Global `OnceLock<Mutex<Option<AgentProcess>>>` and `agent_state()` from acp.rs
+- Module-level `let msgCounter` from AgentContext.tsx
+- Module-level `let lastToolCallId` from agent index.ts
+- `WorkspaceConfig` type from `types.ts` agent-side (now derived from zod schema in config.ts)
+
 - `useSession.ts` hook — duplicated event listener already handled by AgentContext
 - `AcpResponse` and `AcpNotification` types — defined but never used
 - `session_id` field and `#[allow(dead_code)]` annotation from AgentProcess struct

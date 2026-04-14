@@ -1,8 +1,8 @@
 import { tool } from '@strands-agents/sdk';
 import { z } from 'zod';
-import { CapabilityRegistry } from '../registry.js';
+import type { CapabilityRegistry } from '../registry.js';
 
-export const registerCapability = (workspacePath: string) =>
+export const registerCapability = (registry: CapabilityRegistry) =>
   tool({
     name: 'registerCapability',
     description:
@@ -16,9 +16,8 @@ export const registerCapability = (workspacePath: string) =>
       }),
       code: z.string().describe('TypeScript implementation to store'),
     }),
-    callback: ({ definition, code }) => {
-      const registry = new CapabilityRegistry(workspacePath);
-      registry.register(definition, code);
+    callback: async ({ definition, code }) => {
+      await registry.register(definition, code);
       return `Registered: ${definition.name}`;
     },
   });

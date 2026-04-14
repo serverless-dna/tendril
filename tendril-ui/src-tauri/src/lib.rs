@@ -2,13 +2,18 @@ mod acp;
 mod events;
 
 use serde_json::Value;
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
-// Configuration defaults
+// Configuration defaults — agent is the single owner of defaults.
+// These remain only for init_workspace minimal config until the agent fills in defaults.
 const DEFAULT_TIMEOUT_MS: u64 = 45_000;
 const DEFAULT_MAX_CAPABILITIES: u32 = 500;
 const DEFAULT_MAX_TURNS: u32 = 100;
+
+/// Tauri managed state for the agent process.
+pub struct AgentState(pub Arc<Mutex<Option<acp::AgentProcess>>>);
 
 /// App-level config lives at ~/.tendril/config.json
 fn app_config_path() -> PathBuf {
@@ -19,8 +24,8 @@ fn app_config_path() -> PathBuf {
 }
 
 /// Get the configured workspace path, or None if not set
-fn configured_workspace() -> Option<String> {
-    read_app_config_inner().ok().and_then(|c| {
+async fn configured_workspace() -> Option<String> {
+    read_app_config_inner().await.ok().and_then(|c| {
         c.get("workspace")
             .and_then(|w| w.as_str())
             .map(|s| s.to_string())
@@ -29,12 +34,16 @@ fn configured_workspace() -> Option<String> {
 
 /// Validate that a resolved path is within the workspace directory.
 /// Prevents path traversal attacks on file read/write commands.
-fn validate_within_workspace(target: &Path) -> Result<(), String> {
-    let workspace = configured_workspace().ok_or("Workspace not configured")?;
-    let workspace_canonical = fs::canonicalize(Path::new(&expand_tilde(&workspace)))
+async fn validate_within_workspace(target: &Path) -> Result<(), String> {
+    let workspace = configured_workspace()
+        .await
+        .ok_or("Workspace not configured")?;
+    let workspace_canonical = tokio::fs::canonicalize(Path::new(&expand_tilde(&workspace)))
+        .await
         .map_err(|e| format!("Failed to resolve workspace path: {e}"))?;
-    let target_canonical =
-        fs::canonicalize(target).map_err(|e| format!("Failed to resolve target path: {e}"))?;
+    let target_canonical = tokio::fs::canonicalize(target)
+        .await
+        .map_err(|e| format!("Failed to resolve target path: {e}"))?;
     if !target_canonical.starts_with(&workspace_canonical) {
         return Err("Access denied: path is outside workspace".to_string());
     }
@@ -42,23 +51,36 @@ fn validate_within_workspace(target: &Path) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn send_prompt(text: String, _app: tauri::AppHandle) -> Result<(), String> {
-    acp::send_prompt(&text).await.map_err(|e| e.to_string())
+async fn send_prompt(
+    text: String,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    acp::send_prompt(&text, &state.0).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn cancel_prompt() -> Result<(), String> {
-    acp::send_cancel().await.map_err(|e| e.to_string())
+async fn cancel_prompt(state: tauri::State<'_, AgentState>) -> Result<(), String> {
+    acp::send_cancel(&state.0).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn connect_agent_cmd(app: tauri::AppHandle) -> Result<(), String> {
-    acp::connect_agent(&app).await.map_err(|e| e.to_string())
+async fn connect_agent_cmd(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    acp::connect_agent(&app, &state.0)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn restart_agent(app: tauri::AppHandle) -> Result<(), String> {
-    acp::restart_agent(&app).await.map_err(|e| e.to_string())
+async fn restart_agent(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    acp::restart_agent(&app, &state.0)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn expand_tilde(path: &str) -> String {
@@ -70,14 +92,31 @@ fn expand_tilde(path: &str) -> String {
     path.to_string()
 }
 
+/// Dangerous paths that must never be used as workspace roots.
+fn is_dangerous_path(path: &Path) -> bool {
+    let s = path.to_string_lossy();
+    let dangerous = ["/", "/etc", "/usr", "/var", "/System", "/bin", "/sbin", "/lib", "/tmp"];
+    dangerous.iter().any(|d| s == *d)
+}
+
 /// Initialize workspace directory structure + save to app config
 #[tauri::command]
 async fn init_workspace(path: String) -> Result<(), String> {
     let expanded = expand_tilde(&path);
     let workspace = Path::new(&expanded);
 
+    // Reject dangerous paths and path traversal
+    if is_dangerous_path(workspace) {
+        return Err(format!("Refused to initialize workspace at dangerous path: {expanded}"));
+    }
+    if expanded.contains("..") {
+        return Err("Workspace path must not contain '..' traversal".to_string());
+    }
+
     // Create workspace structure
-    fs::create_dir_all(workspace.join("tools")).map_err(|e| e.to_string())?;
+    tokio::fs::create_dir_all(workspace.join("tools"))
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Write empty registry inside tools/
     let tools_index = workspace.join("tools").join("index.json");
@@ -88,14 +127,18 @@ async fn init_workspace(path: String) -> Result<(), String> {
         }))
         .map_err(|e| format!("Failed to serialize index: {e}"))?;
 
-        fs::write(&tools_index, index_json).map_err(|e| e.to_string())?;
+        tokio::fs::write(&tools_index, index_json)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     // Read existing app config or create default, then set workspace path
-    let mut config = read_app_config_inner().unwrap_or_else(|_| default_app_config());
+    let mut config = read_app_config_inner()
+        .await
+        .unwrap_or_else(|_| default_app_config());
     config["workspace"] = serde_json::json!(expanded);
 
-    write_app_config_inner(&config)?;
+    write_app_config_inner(&config).await?;
 
     Ok(())
 }
@@ -103,30 +146,87 @@ async fn init_workspace(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn read_capabilities(path: String) -> Result<Vec<Value>, String> {
     let expanded = expand_tilde(&path);
-    let index_path = Path::new(&expanded).join("tools").join("index.json");
-    if !index_path.exists() {
-        return Ok(vec![]);
+    let base = Path::new(&expanded);
+
+    // Validate workspace boundary
+    validate_within_workspace(base).await?;
+
+    let index_path = base.join("tools").join("index.json");
+    match tokio::fs::read_to_string(&index_path).await {
+        Ok(content) => {
+            let index: Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+            let caps = index
+                .get("capabilities")
+                .and_then(|c| c.as_array())
+                .cloned()
+                .unwrap_or_default();
+            Ok(caps)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(e) => Err(e.to_string()),
     }
-    let content = fs::read_to_string(&index_path).map_err(|e| e.to_string())?;
-    let index: Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-    let caps = index
-        .get("capabilities")
-        .and_then(|c| c.as_array())
-        .cloned()
-        .unwrap_or_default();
-    Ok(caps)
 }
 
 /// Read app config from ~/.tendril/config.json
 #[tauri::command]
 async fn read_config() -> Result<Value, String> {
-    read_app_config_inner()
+    read_app_config_inner().await
+}
+
+/// Validate known config field types before writing.
+fn validate_config_payload(config: &Value) -> Result<(), String> {
+    if let Some(workspace) = config.get("workspace").and_then(|w| w.as_str()) {
+        if workspace.is_empty() {
+            return Err("Config validation: workspace must not be empty".to_string());
+        }
+        let wp = Path::new(workspace);
+        if is_dangerous_path(wp) {
+            return Err(format!(
+                "Config validation: workspace must not be a system directory: {workspace}"
+            ));
+        }
+    }
+    if let Some(sandbox) = config.get("sandbox") {
+        if let Some(t) = sandbox.get("timeoutMs") {
+            if let Some(n) = t.as_f64() {
+                if n <= 0.0 || n != n.floor() {
+                    return Err("Config validation: sandbox.timeoutMs must be a positive integer".to_string());
+                }
+            } else if !t.is_null() {
+                return Err("Config validation: sandbox.timeoutMs must be a number".to_string());
+            }
+        }
+    }
+    if let Some(registry) = config.get("registry") {
+        if let Some(m) = registry.get("maxCapabilities") {
+            if let Some(n) = m.as_f64() {
+                if n <= 0.0 || n != n.floor() {
+                    return Err("Config validation: registry.maxCapabilities must be a positive integer".to_string());
+                }
+            } else if !m.is_null() {
+                return Err("Config validation: registry.maxCapabilities must be a number".to_string());
+            }
+        }
+    }
+    if let Some(agent) = config.get("agent") {
+        if let Some(m) = agent.get("maxTurns") {
+            if let Some(n) = m.as_f64() {
+                if n <= 0.0 || n != n.floor() {
+                    return Err("Config validation: agent.maxTurns must be a positive integer".to_string());
+                }
+            } else if !m.is_null() {
+                return Err("Config validation: agent.maxTurns must be a number".to_string());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Write app config to ~/.tendril/config.json
 #[tauri::command]
 async fn write_config(config: Value) -> Result<(), String> {
-    write_app_config_inner(&config)
+    validate_config_payload(&config)?;
+    write_app_config_inner(&config).await
 }
 
 #[derive(serde::Serialize)]
@@ -141,16 +241,15 @@ struct FileEntry {
 async fn list_directory(dir_path: String) -> Result<Vec<FileEntry>, String> {
     let expanded = expand_tilde(&dir_path);
     let dir = Path::new(&expanded);
-    if !dir.is_dir() {
-        return Err(format!("Not a directory: {expanded}"));
-    }
+
+    // Validate workspace boundary
+    validate_within_workspace(dir).await?;
 
     let mut entries: Vec<FileEntry> = Vec::new();
-    let read_dir = fs::read_dir(dir).map_err(|e| e.to_string())?;
+    let mut read_dir = tokio::fs::read_dir(dir).await.map_err(|e| e.to_string())?;
 
-    for entry in read_dir {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let metadata = entry.metadata().map_err(|e| e.to_string())?;
+    while let Some(entry) = read_dir.next_entry().await.map_err(|e| e.to_string())? {
+        let metadata = entry.metadata().await.map_err(|e| e.to_string())?;
         let name = entry.file_name().to_string_lossy().to_string();
 
         // Skip hidden files starting with .
@@ -180,32 +279,69 @@ async fn list_directory(dir_path: String) -> Result<Vec<FileEntry>, String> {
 async fn read_file_content(file_path: String) -> Result<String, String> {
     let expanded = expand_tilde(&file_path);
     let path = Path::new(&expanded);
-    if !path.is_file() {
+    validate_within_workspace(path).await?;
+    // Limit to 1MB
+    let metadata = tokio::fs::metadata(path)
+        .await
+        .map_err(|e| e.to_string())?;
+    if !metadata.is_file() {
         return Err(format!("Not a file: {expanded}"));
     }
-    validate_within_workspace(path)?;
-    // Limit to 1MB
-    let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
     if metadata.len() > 1_048_576 {
         return Err("File too large (>1MB)".to_string());
     }
-    fs::read_to_string(path).map_err(|e| e.to_string())
+    tokio::fs::read_to_string(path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
-    let is_url = path.starts_with("http://") || path.starts_with("https://");
-    let expanded = if is_url {
-        path.clone()
-    } else {
-        expand_tilde(&path)
-    };
-    if !is_url && !Path::new(&expanded).exists() {
-        return Err(format!("Path does not exist: {expanded}"));
+    // Separate URL opening from file revealing
+    if path.starts_with("https://") {
+        // HTTPS URLs: open in default browser
+        #[cfg(target_os = "macos")]
+        {
+            std::process::Command::new("open")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::process::Command::new("explorer")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            std::process::Command::new("xdg-open")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
     }
+
+    // Reject non-HTTPS URL schemes
+    if path.starts_with("http://")
+        || path.starts_with("file://")
+        || path.starts_with("javascript:")
+        || path.starts_with("data:")
+    {
+        return Err(format!("Unsupported URL scheme: {path}"));
+    }
+
+    // File path: validate within workspace, then reveal (don't execute)
+    let expanded = expand_tilde(&path);
+    let file_path = Path::new(&expanded);
+    validate_within_workspace(file_path).await?;
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
+            .arg("--reveal")
             .arg(&expanded)
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -213,14 +349,19 @@ async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(&expanded)
+            .arg(format!("/select,{expanded}"))
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "linux")]
     {
+        // xdg-open on the parent directory to reveal the file
+        let parent = file_path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| expanded.clone());
         std::process::Command::new("xdg-open")
-            .arg(&expanded)
+            .arg(&parent)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -241,16 +382,19 @@ async fn write_file_content(file_path: String, content: String) -> Result<(), St
     }
     // For new files, validate parent is within workspace
     if path.exists() {
-        validate_within_workspace(path)?;
+        validate_within_workspace(path).await?;
     } else if let Some(parent) = path.parent() {
-        validate_within_workspace(parent)?;
+        validate_within_workspace(parent).await?;
     }
-    fs::write(path, content).map_err(|e| e.to_string())
+    tokio::fs::write(path, content)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn read_tool_source(workspace: String, name: String) -> Result<String, String> {
     // Validate tool name is safe (snake_case only)
+    // NOTE: This pattern must match VALID_TOOL_NAME in tendril-agent/src/registry.ts
     if !name
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
@@ -263,43 +407,36 @@ async fn read_tool_source(workspace: String, name: String) -> Result<String, Str
     let tool_path = Path::new(&expanded)
         .join("tools")
         .join(format!("{name}.ts"));
-    if !tool_path.exists() {
-        return Err(format!("Tool source not found: {}", tool_path.display()));
-    }
-    fs::read_to_string(&tool_path).map_err(|e| e.to_string())
+    tokio::fs::read_to_string(&tool_path)
+        .await
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!("Tool source not found: {}", tool_path.display())
+            } else {
+                e.to_string()
+            }
+        })
 }
 
 #[tauri::command]
 async fn get_system_prompt() -> Result<String, String> {
-    let workspace = configured_workspace().unwrap_or_else(|| "~/tendril-workspace".to_string());
+    let workspace = configured_workspace()
+        .await
+        .unwrap_or_else(|| "~/tendril-workspace".to_string());
+    let expanded = expand_tilde(&workspace);
+    let prompt_path = Path::new(&expanded).join("system-prompt.txt");
 
-    Ok(format!(
-        r#"You are Tendril. You build tools.
-
-Workspace: {workspace}
-Registry: {workspace}/tools/index.json
-
-EVERY REQUEST — follow this exact sequence:
-1. searchCapabilities(query) — always search first
-2. Found? → loadTool(name) then execute(code, args)
-3. Not found? → registerCapability(definition, code) then execute(code, args)
-
-NEVER skip step 1. NEVER skip step 3 — if no tool exists, you MUST register one before executing.
-
-CAPABILITY DEFINITION FORMAT:
-{{{{ name: "snake_case_name", capability: "one sentence", triggers: ["signal1", "signal2"], suppression: ["condition1"] }}}}
-
-TOOL CODE FORMAT:
-- TypeScript for Deno. args object has your parameters. Output with console.log().
-- External packages: import * as x from "https://esm.sh/{{package}}"
-- fetch() is available. Read/write scoped to workspace. No shell access.
-- Return ONLY the data the user needs — filter and reshape before logging.
-
-RULES:
-- Act immediately. No narration.
-- Never answer from memory when a tool can get live data.
-- On failure: fix the code and retry. Do not fall back to memory."#
-    ))
+    // Try to read from shared file first (written by agent)
+    match tokio::fs::read_to_string(&prompt_path).await {
+        Ok(content) => Ok(content),
+        Err(_) => {
+            // Fallback: return a placeholder until the agent writes the file
+            Ok(format!(
+                "System prompt not yet available. Start the agent to generate it.\n\
+                 Workspace: {workspace}"
+            ))
+        }
+    }
 }
 
 fn default_app_config() -> Value {
@@ -321,22 +458,31 @@ fn default_app_config() -> Value {
     })
 }
 
-fn read_app_config_inner() -> Result<Value, String> {
+async fn read_app_config_inner() -> Result<Value, String> {
     let path = app_config_path();
-    if !path.exists() {
-        return Err("Config not found".to_string());
-    }
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let content = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "Config not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
     serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 
-fn write_app_config_inner(config: &Value) -> Result<(), String> {
+async fn write_app_config_inner(config: &Value) -> Result<(), String> {
     let path = app_config_path();
     let parent = path.parent().ok_or("Config path has no parent directory")?;
-    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    tokio::fs::create_dir_all(parent)
+        .await
+        .map_err(|e| e.to_string())?;
     let config_str = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {e}"))?;
-    fs::write(&path, config_str).map_err(|e| e.to_string())?;
+    tokio::fs::write(&path, config_str)
+        .await
+        .map_err(|e| e.to_string())?;
     eprintln!("[config] Saved to {}", path.display());
     Ok(())
 }
@@ -346,6 +492,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .manage(AgentState(Arc::new(Mutex::new(None))))
         .invoke_handler(tauri::generate_handler![
             send_prompt,
             cancel_prompt,

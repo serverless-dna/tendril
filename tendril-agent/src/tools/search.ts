@@ -1,8 +1,8 @@
 import { tool } from '@strands-agents/sdk';
 import { z } from 'zod';
-import { CapabilityRegistry } from '../registry.js';
+import type { CapabilityRegistry } from '../registry.js';
 
-export const searchCapabilities = (workspacePath: string) =>
+export const searchCapabilities = (registry: CapabilityRegistry) =>
   tool({
     name: 'searchCapabilities',
     description:
@@ -10,10 +10,9 @@ export const searchCapabilities = (workspacePath: string) =>
     inputSchema: z.object({
       query: z.string().describe('What capability to search for'),
     }),
-    callback: ({ query }) => {
+    callback: async ({ query }) => {
       try {
-        const registry = new CapabilityRegistry(workspacePath);
-        const results = registry.search(query);
+        const results = await registry.search(query);
         if (results.length === 0) {
           return 'No tools found. You MUST call registerCapability to create one.';
         }

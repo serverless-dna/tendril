@@ -1,27 +1,30 @@
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import type { WorkspaceConfig } from './types.js';
+import { z } from 'zod';
 
-const DEFAULTS: WorkspaceConfig = {
-  model: {
-    provider: 'bedrock',
-    modelId: 'us.anthropic.claude-sonnet-4-5-20250514',
-    region: 'us-east-1',
-    profile: undefined,
-  },
-  sandbox: {
-    denoPath: 'deno',
-    timeoutMs: 45000,
-    allowedDomains: [],
-  },
-  registry: {
-    maxCapabilities: 500,
-  },
-  agent: {
-    maxTurns: 100,
-  },
-};
+/** Zod schema for workspace config — single source of truth for defaults and validation. */
+const WorkspaceConfigSchema = z.object({
+  model: z.object({
+    provider: z.string().default('bedrock'),
+    modelId: z.string().min(1, 'model.modelId is required').default('us.anthropic.claude-sonnet-4-5-20250514'),
+    region: z.string().min(1, 'model.region is required').default('us-east-1'),
+    profile: z.string().optional(),
+  }).default({ provider: 'bedrock', modelId: 'us.anthropic.claude-sonnet-4-5-20250514', region: 'us-east-1' }),
+  sandbox: z.object({
+    denoPath: z.string().default('deno'),
+    timeoutMs: z.number().positive().int().default(45000),
+    allowedDomains: z.array(z.string()).default([]),
+  }).default({ denoPath: 'deno', timeoutMs: 45000, allowedDomains: [] }),
+  registry: z.object({
+    maxCapabilities: z.number().positive().int().default(500),
+  }).default({ maxCapabilities: 500 }),
+  agent: z.object({
+    maxTurns: z.number().positive().int().default(100),
+  }).default({ maxTurns: 100 }),
+});
+
+export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
 
 /** App config path: ~/.tendril/config.json (or overridden for testing) */
 function appConfigPath(configDirOverride?: string): string {
@@ -33,15 +36,21 @@ function appConfigPath(configDirOverride?: string): string {
  * Read config from ~/.tendril/config.json (or configDirOverride/.tendril/config.json).
  * Returns the config and the workspace path.
  */
-export function readConfig(workspaceOverride?: string, configDirOverride?: string): { config: WorkspaceConfig; workspace: string } {
+export async function readConfig(workspaceOverride?: string, configDirOverride?: string): Promise<{ config: WorkspaceConfig; workspace: string }> {
   const configPath = appConfigPath(configDirOverride);
 
   let raw: Record<string, unknown> = {};
-  if (fs.existsSync(configPath)) {
-    try {
-      raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    } catch (err) {
-      throw new Error(`Failed to parse config at ${configPath}: ${err instanceof Error ? err.message : String(err)}`);
+  try {
+    const content = await fs.readFile(configPath, 'utf-8');
+    raw = JSON.parse(content);
+  } catch (err: unknown) {
+    // File not found — use defaults
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // No config file — defaults will be applied by zod
+    } else if (err instanceof SyntaxError) {
+      throw new Error(`Failed to parse config at ${configPath}: ${err.message}`);
+    } else {
+      throw new Error(`Failed to read config at ${configPath}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -49,32 +58,7 @@ export function readConfig(workspaceOverride?: string, configDirOverride?: strin
     ?? (raw.workspace as string | undefined)
     ?? path.join(os.homedir(), 'tendril-workspace');
 
-  const config: WorkspaceConfig = {
-    model: {
-      provider: (raw.model as Record<string, unknown>)?.provider as string ?? DEFAULTS.model.provider,
-      modelId: (raw.model as Record<string, unknown>)?.modelId as string ?? DEFAULTS.model.modelId,
-      region: (raw.model as Record<string, unknown>)?.region as string ?? DEFAULTS.model.region,
-      profile: (raw.model as Record<string, unknown>)?.profile as string | undefined ?? DEFAULTS.model.profile,
-    },
-    sandbox: {
-      denoPath: (raw.sandbox as Record<string, unknown>)?.denoPath as string ?? DEFAULTS.sandbox.denoPath,
-      timeoutMs: (raw.sandbox as Record<string, unknown>)?.timeoutMs as number ?? DEFAULTS.sandbox.timeoutMs,
-      allowedDomains: (raw.sandbox as Record<string, unknown>)?.allowedDomains as string[] ?? DEFAULTS.sandbox.allowedDomains,
-    },
-    registry: {
-      maxCapabilities: (raw.registry as Record<string, unknown>)?.maxCapabilities as number ?? DEFAULTS.registry.maxCapabilities,
-    },
-    agent: {
-      maxTurns: (raw.agent as Record<string, unknown>)?.maxTurns as number ?? DEFAULTS.agent.maxTurns,
-    },
-  };
-
-  if (!config.model.modelId) {
-    throw new Error('Config validation failed: model.modelId is required');
-  }
-  if (!config.model.region) {
-    throw new Error('Config validation failed: model.region is required');
-  }
+  const config = WorkspaceConfigSchema.parse(raw);
 
   return { config, workspace };
 }

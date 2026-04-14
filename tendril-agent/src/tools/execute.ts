@@ -1,9 +1,9 @@
 import { tool } from '@strands-agents/sdk';
 import { z } from 'zod';
 import { executeDeno } from '../sandbox.js';
-import { readConfig } from '../config.js';
+import type { WorkspaceConfig } from '../config.js';
 
-export const executeCode = (workspacePath: string) =>
+export const executeCode = (workspacePath: string, config: WorkspaceConfig) =>
   tool({
     name: 'execute',
     description:
@@ -21,7 +21,6 @@ export const executeCode = (workspacePath: string) =>
           throw new Error(`Failed to parse args: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
-      const { config } = readConfig(workspacePath);
       return executeDeno(
         code,
         parsedArgs,
