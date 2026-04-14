@@ -43,11 +43,9 @@ fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
             .map(|d| d.join("binaries").join(format!("deno-{target_triple}"))),
     ];
 
-    for candidate in &candidates {
-        if let Some(ref path) = candidate {
-            if path.exists() {
-                return path.to_string_lossy().to_string();
-            }
+    for path in candidates.iter().flatten() {
+        if path.exists() {
+            return path.to_string_lossy().to_string();
         }
     }
 
@@ -235,7 +233,7 @@ pub async fn restart_agent(app: &AppHandle) -> Result<(), AcpError> {
     // Kill existing process
     {
         let mut state = agent_state().lock().await;
-        if let Some(mut agent) = state.take() {
+        if let Some(agent) = state.take() {
             let _ = agent.child.kill();
             eprintln!("[acp] Killed previous agent process");
         }
