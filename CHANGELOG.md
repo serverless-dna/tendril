@@ -15,7 +15,7 @@ All notable changes to the Tendril project will be documented in this file.
 - Tool name validation (snake_case only) in both Rust and TypeScript registries
 
 ### Changed
-- Agent system prompt rebalanced: one-off tasks use Deno built-ins directly, reusable operations must be registered as tools
+- Agent system prompt: toolsmith identity — default is BUILD A TOOL, raw execute() restricted to single-line file reads only
 - Capability registry index.json moved from workspace root into tools/ directory (co-located with implementations)
 - Workspace tab header now shows real folder name and full path instead of "~/workspace"
 - Breadcrumb root shows workspace folder name instead of "~/workspace"
