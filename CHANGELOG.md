@@ -30,6 +30,7 @@ All notable changes to the Tendril project will be documented in this file.
 - Debug log max entries extracted to `MAX_DEBUG_LOG_ENTRIES` constant
 
 ### Fixed
+- Registry loadIndex() crashes on empty or malformed index.json — now treats missing/corrupt `capabilities` array as empty registry instead of throwing
 - Path traversal vulnerability in `read_file_content`, `write_file_content`, `read_tool_source` — now validates paths are within workspace
 - Unguarded JSON.parse calls in execute.ts, protocol.ts, config.ts, registry.ts — all wrapped in try/catch
 - All `unwrap()` calls in Rust replaced with proper `?` / `.ok_or()` / `.map_err()` error propagation

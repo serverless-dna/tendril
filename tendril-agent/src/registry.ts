@@ -24,9 +24,15 @@ export class CapabilityRegistry {
       return { version: '1.0.0', capabilities: [] };
     }
     try {
-      return JSON.parse(fs.readFileSync(this.indexPath, 'utf-8'));
-    } catch (err) {
-      throw new Error(`Failed to parse registry index: ${err instanceof Error ? err.message : String(err)}`);
+      const raw = JSON.parse(fs.readFileSync(this.indexPath, 'utf-8'));
+      // Ensure capabilities array exists even if index.json is malformed
+      if (!Array.isArray(raw?.capabilities)) {
+        return { version: raw?.version ?? '1.0.0', capabilities: [] };
+      }
+      return raw as CapabilityIndex;
+    } catch {
+      // Corrupted index — treat as empty rather than crashing
+      return { version: '1.0.0', capabilities: [] };
     }
   }
 
