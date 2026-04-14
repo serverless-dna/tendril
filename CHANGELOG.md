@@ -5,6 +5,10 @@ All notable changes to the Tendril project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- GitHub Actions quality gate workflow — runs format, lint, and test on every PR and branch push
+- GitHub Actions release workflow — manual trigger from main with semver tag, builds Tauri app, publishes GitHub Release
+- PR template with Summary and Test Plan sections
+- Issue templates for Bug Report and Feature Request (YAML forms)
 - CodeMirror 6 editor for workspace file viewer and capability source browser (replaces hand-rolled syntax highlighting)
 - Editable files in workspace with save support (Cmd+S and Save button, dirty state indicator)
 - Language support: TypeScript/JSX, JSON, Markdown, Rust via CodeMirror extensions
