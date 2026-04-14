@@ -20,20 +20,21 @@ fn app_config_path() -> PathBuf {
 
 /// Get the configured workspace path, or None if not set
 fn configured_workspace() -> Option<String> {
-    read_app_config_inner()
-        .ok()
-        .and_then(|c| c.get("workspace").and_then(|w| w.as_str()).map(|s| s.to_string()))
+    read_app_config_inner().ok().and_then(|c| {
+        c.get("workspace")
+            .and_then(|w| w.as_str())
+            .map(|s| s.to_string())
+    })
 }
 
 /// Validate that a resolved path is within the workspace directory.
 /// Prevents path traversal attacks on file read/write commands.
 fn validate_within_workspace(target: &Path) -> Result<(), String> {
-    let workspace = configured_workspace()
-        .ok_or("Workspace not configured")?;
+    let workspace = configured_workspace().ok_or("Workspace not configured")?;
     let workspace_canonical = fs::canonicalize(Path::new(&expand_tilde(&workspace)))
         .map_err(|e| format!("Failed to resolve workspace path: {e}"))?;
-    let target_canonical = fs::canonicalize(target)
-        .map_err(|e| format!("Failed to resolve target path: {e}"))?;
+    let target_canonical =
+        fs::canonicalize(target).map_err(|e| format!("Failed to resolve target path: {e}"))?;
     if !target_canonical.starts_with(&workspace_canonical) {
         return Err("Access denied: path is outside workspace".to_string());
     }
@@ -87,8 +88,7 @@ async fn init_workspace(path: String) -> Result<(), String> {
         }))
         .map_err(|e| format!("Failed to serialize index: {e}"))?;
 
-        fs::write(&tools_index, index_json)
-            .map_err(|e| e.to_string())?;
+        fs::write(&tools_index, index_json).map_err(|e| e.to_string())?;
     }
 
     // Read existing app config or create default, then set workspace path
@@ -168,7 +168,9 @@ async fn list_directory(dir_path: String) -> Result<Vec<FileEntry>, String> {
 
     // Directories first, then files, alphabetically
     entries.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 
     Ok(entries)
@@ -193,7 +195,11 @@ async fn read_file_content(file_path: String) -> Result<String, String> {
 #[tauri::command]
 async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
     let is_url = path.starts_with("http://") || path.starts_with("https://");
-    let expanded = if is_url { path.clone() } else { expand_tilde(&path) };
+    let expanded = if is_url {
+        path.clone()
+    } else {
+        expand_tilde(&path)
+    };
     if !is_url && !Path::new(&expanded).exists() {
         return Err(format!("Path does not exist: {expanded}"));
     }
@@ -227,7 +233,10 @@ async fn write_file_content(file_path: String, content: String) -> Result<(), St
     let path = Path::new(&expanded);
     if let Some(parent) = path.parent() {
         if !parent.exists() {
-            return Err(format!("Parent directory does not exist: {}", parent.display()));
+            return Err(format!(
+                "Parent directory does not exist: {}",
+                parent.display()
+            ));
         }
     }
     // For new files, validate parent is within workspace
@@ -242,11 +251,18 @@ async fn write_file_content(file_path: String, content: String) -> Result<(), St
 #[tauri::command]
 async fn read_tool_source(workspace: String, name: String) -> Result<String, String> {
     // Validate tool name is safe (snake_case only)
-    if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
-        return Err(format!("Invalid tool name: {name}. Only lowercase letters, digits, and underscores allowed."));
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    {
+        return Err(format!(
+            "Invalid tool name: {name}. Only lowercase letters, digits, and underscores allowed."
+        ));
     }
     let expanded = expand_tilde(&workspace);
-    let tool_path = Path::new(&expanded).join("tools").join(format!("{name}.ts"));
+    let tool_path = Path::new(&expanded)
+        .join("tools")
+        .join(format!("{name}.ts"));
     if !tool_path.exists() {
         return Err(format!("Tool source not found: {}", tool_path.display()));
     }
@@ -255,10 +271,10 @@ async fn read_tool_source(workspace: String, name: String) -> Result<String, Str
 
 #[tauri::command]
 async fn get_system_prompt() -> Result<String, String> {
-    let workspace = configured_workspace()
-        .unwrap_or_else(|| "~/tendril-workspace".to_string());
+    let workspace = configured_workspace().unwrap_or_else(|| "~/tendril-workspace".to_string());
 
-    Ok(format!(r#"You are Tendril. You build tools.
+    Ok(format!(
+        r#"You are Tendril. You build tools.
 
 Workspace: {workspace}
 Registry: {workspace}/tools/index.json
@@ -282,7 +298,8 @@ TOOL CODE FORMAT:
 RULES:
 - Act immediately. No narration.
 - Never answer from memory when a tool can get live data.
-- On failure: fix the code and retry. Do not fall back to memory."#))
+- On failure: fix the code and retry. Do not fall back to memory."#
+    ))
 }
 
 fn default_app_config() -> Value {
@@ -315,8 +332,7 @@ fn read_app_config_inner() -> Result<Value, String> {
 
 fn write_app_config_inner(config: &Value) -> Result<(), String> {
     let path = app_config_path();
-    let parent = path.parent()
-        .ok_or("Config path has no parent directory")?;
+    let parent = path.parent().ok_or("Config path has no parent directory")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let config_str = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {e}"))?;

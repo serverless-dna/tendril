@@ -4,11 +4,14 @@ use tauri::{AppHandle, Emitter};
 /// All protocol messages are forwarded to the frontend as "agent-debug" events
 /// for full visibility in the debug panel.
 fn emit_debug(app: &AppHandle, direction: &str, msg: &Value) {
-    let _ = app.emit("agent-debug", serde_json::json!({
-        "direction": direction,
-        "message": msg,
-        "timestamp": chrono_now(),
-    }));
+    let _ = app.emit(
+        "agent-debug",
+        serde_json::json!({
+            "direction": direction,
+            "message": msg,
+            "timestamp": chrono_now(),
+        }),
+    );
 }
 
 pub fn chrono_now() -> String {
@@ -81,6 +84,9 @@ pub fn handle_agent_line(app: &AppHandle, line: &[u8]) {
 
 /// Call this when sending a message TO the agent, for debug visibility.
 pub fn log_host_to_agent(app: &AppHandle, msg: &Value) {
-    eprintln!("[acp] host→agent: {}", msg.get("method").or(msg.get("id")).unwrap_or(&Value::Null));
+    eprintln!(
+        "[acp] host→agent: {}",
+        msg.get("method").or(msg.get("id")).unwrap_or(&Value::Null)
+    );
     emit_debug(app, "host→agent", msg);
 }
