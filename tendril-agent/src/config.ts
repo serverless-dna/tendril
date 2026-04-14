@@ -23,17 +23,18 @@ const DEFAULTS: WorkspaceConfig = {
   },
 };
 
-/** App config path: ~/.tendril/config.json */
-function appConfigPath(): string {
-  return path.join(os.homedir(), '.tendril', 'config.json');
+/** App config path: ~/.tendril/config.json (or overridden for testing) */
+function appConfigPath(configDirOverride?: string): string {
+  const base = configDirOverride ?? os.homedir();
+  return path.join(base, '.tendril', 'config.json');
 }
 
 /**
- * Read config from ~/.tendril/config.json.
+ * Read config from ~/.tendril/config.json (or configDirOverride/.tendril/config.json).
  * Returns the config and the workspace path.
  */
-export function readConfig(workspaceOverride?: string): { config: WorkspaceConfig; workspace: string } {
-  const configPath = appConfigPath();
+export function readConfig(workspaceOverride?: string, configDirOverride?: string): { config: WorkspaceConfig; workspace: string } {
+  const configPath = appConfigPath(configDirOverride);
 
   let raw: Record<string, unknown> = {};
   if (fs.existsSync(configPath)) {

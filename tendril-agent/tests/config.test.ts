@@ -27,7 +27,7 @@ describe('readConfig', () => {
       }),
     );
 
-    const config = readConfig(tmpDir);
+    const { config } = readConfig(undefined, tmpDir);
     expect(config.model.modelId).toBe('test-model');
     expect(config.model.region).toBe('eu-west-1');
     expect(config.sandbox.timeoutMs).toBe(10000);
@@ -40,7 +40,7 @@ describe('readConfig', () => {
       JSON.stringify({ model: { modelId: 'test-model', region: 'us-east-1' } }),
     );
 
-    const config = readConfig(tmpDir);
+    const { config } = readConfig(undefined, tmpDir);
     expect(config.sandbox.timeoutMs).toBe(45000);
     expect(config.sandbox.denoPath).toBe('deno');
     expect(config.registry.maxCapabilities).toBe(500);
@@ -49,7 +49,7 @@ describe('readConfig', () => {
 
   it('returns full defaults when config file is missing', () => {
     fs.rmSync(path.join(tmpDir, '.tendril'), { recursive: true });
-    const config = readConfig(tmpDir);
+    const { config } = readConfig(undefined, tmpDir);
     expect(config.model.modelId).toBeDefined();
     expect(config.sandbox.timeoutMs).toBe(45000);
   });
@@ -60,7 +60,7 @@ describe('readConfig', () => {
       JSON.stringify({ model: { modelId: '', region: 'us-east-1' } }),
     );
 
-    expect(() => readConfig(tmpDir)).toThrow('model.modelId is required');
+    expect(() => readConfig(undefined, tmpDir)).toThrow('model.modelId is required');
   });
 
   it('throws when model.region is empty', () => {
@@ -69,6 +69,6 @@ describe('readConfig', () => {
       JSON.stringify({ model: { modelId: 'test', region: '' } }),
     );
 
-    expect(() => readConfig(tmpDir)).toThrow('model.region is required');
+    expect(() => readConfig(undefined, tmpDir)).toThrow('model.region is required');
   });
 });
