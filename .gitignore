@@ -14,3 +14,7 @@ release/
 *.rlib
 .idea/
 .vscode/
+
+# Tauri build artifacts
+tendril-ui/src-tauri/binaries/
+tendril-ui/src-tauri/gen/
