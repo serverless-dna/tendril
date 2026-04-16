@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useAgent } from '../hooks/useAgent';
 import { MessageBubble } from './MessageBubble';
 import { ToolTrace } from './ToolTrace';

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAgentState } from '../context/AgentContext';
 
 const directionColors: Record<string, string> = {

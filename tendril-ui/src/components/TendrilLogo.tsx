@@ -1,4 +1,3 @@
-import React from 'react';
 
 // 16x16 — organic tendril growth, asymmetric, curving paths from a small center
 const pixels = [

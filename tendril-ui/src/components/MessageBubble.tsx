@@ -1,4 +1,3 @@
-import React from 'react';
 import { Streamdown } from 'streamdown';
 import { code } from '@streamdown/code';
 import 'streamdown/styles.css';

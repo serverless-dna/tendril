@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -201,7 +201,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
             if (isChunk) {
               const text = (update?.text as string) ?? '';
               // Find last active chunk group
-              const lastChunkIdx = prev.findLastIndex((e) => e.isChunkGroup);
+              const lastChunkIdx = prev.findLastIndex((e: DebugEntry) => e.isChunkGroup);
               if (lastChunkIdx >= 0) {
                 const existing = prev[lastChunkIdx];
                 const updated = { ...existing, message: (existing.message as string) + text, timestamp: event.payload.timestamp };
