@@ -1,6 +1,8 @@
-import { spawn } from 'node:child_process';
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as os from 'node:os';
+import * as crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 
 export async function executeDeno(
   code: string,
@@ -12,9 +14,11 @@ export async function executeDeno(
 ): Promise<string> {
   const prelude = `const args = ${JSON.stringify(args)};\nconst __workspace = ${JSON.stringify(workspacePath)};\n`;
   const script = `${prelude}\n${code}`;
-  const tmpFile = path.join(workspacePath, `.tendril-exec-${Date.now()}.ts`);
 
-  fs.writeFileSync(tmpFile, script);
+  // Use cryptographically random filename in OS temp directory
+  const tmpFile = path.join(os.tmpdir(), `.tendril-exec-${crypto.randomUUID()}.ts`);
+
+  await fs.writeFile(tmpFile, script);
 
   try {
     return await new Promise<string>((resolve, reject) => {
@@ -58,8 +62,10 @@ export async function executeDeno(
       });
     });
   } finally {
-    if (fs.existsSync(tmpFile)) {
-      fs.unlinkSync(tmpFile);
+    try {
+      await fs.unlink(tmpFile);
+    } catch {
+      // Best effort cleanup — file may already be gone
     }
   }
 }

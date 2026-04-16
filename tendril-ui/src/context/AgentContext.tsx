@@ -1,12 +1,8 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, useState, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 
 const MAX_DEBUG_LOG_ENTRIES = 500;
-
-let msgCounter = 0;
-function nextMsgId(): string {
-  return `msg-${Date.now()}-${++msgCounter}`;
-}
 
 export interface Message {
   id: string;
@@ -36,7 +32,7 @@ export interface TokenUsageData {
 export interface AgentState {
   messages: Message[];
   isProcessing: boolean;
-  connectionStatus: 'connecting' | 'connected' | 'error' | 'disconnected';
+  connectionStatus: 'connecting' | 'connected' | 'error' | 'disconnected' | 'reconnecting';
   error: string | null;
 }
 
@@ -59,7 +55,7 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
         ...state,
         messages: [
           ...state.messages,
-          { id: nextMsgId(), role: 'user', text: action.text, toolCalls: [] },
+          { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, role: 'user', text: action.text, toolCalls: [] },
         ],
         isProcessing: true,
         error: null,
@@ -70,34 +66,34 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
         ...state,
         messages: [
           ...state.messages,
-          { id: nextMsgId(), role: 'assistant', text: '', toolCalls: [] },
+          { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, role: 'assistant', text: '', toolCalls: [] },
         ],
       };
 
     case 'APPEND_TEXT': {
+      // State machine for text appending:
+      // 1. No assistant message yet → ignore (START_ASSISTANT_MESSAGE should come first)
+      // 2. Assistant message has NO completed tools → append to current text
+      // 3. Assistant message has completed tools AND text is empty → append (post-tool response starting)
+      // 4. Assistant message has completed tools AND text is non-empty → new bubble for post-tool response
       const msgs = [...state.messages];
       const last = msgs[msgs.length - 1];
-      if (last?.role === 'assistant') {
-        // If the current assistant message has completed tool calls, the new text
-        // is the post-tool response — start a fresh bubble so it appears after them
-        const hasCompletedTools = last.toolCalls.some((tc) => tc.status === 'completed');
-        if (hasCompletedTools && last.text === '') {
-          // Empty post-tool message already started — just append
-          msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
-        } else if (hasCompletedTools) {
-          // Start new bubble for post-tool response
-          return {
-            ...state,
-            messages: [
-              ...msgs,
-              { id: nextMsgId(), role: 'assistant', text: action.text, toolCalls: [] },
-            ],
-          };
-        } else {
-          msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
-        }
+      if (last?.role !== 'assistant') return state;
+
+      const hasCompletedTools = last.toolCalls.some((tc) => tc.status === 'completed');
+      if (!hasCompletedTools || last.text === '') {
+        // Cases 2 and 3: append to current message
+        msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
+        return { ...state, messages: msgs };
       }
-      return { ...state, messages: msgs };
+      // Case 4: start new bubble for post-tool response
+      return {
+        ...state,
+        messages: [
+          ...msgs,
+          { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, role: 'assistant', text: action.text, toolCalls: [] },
+        ],
+      };
     }
 
     case 'ADD_TOOL_CALL': {
@@ -161,6 +157,8 @@ export interface DebugEntry {
   direction: string;
   message: unknown;
   timestamp?: string;
+  /** True while this entry is an active chunk group being appended to */
+  isChunkGroup?: boolean;
 }
 
 const AgentContext = createContext<{
@@ -177,10 +175,12 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 
   // Single place for ALL Tauri event listeners — components just read state
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const cleanups: Array<() => void> = [];
 
     const setup = async () => {
+      if (controller.signal.aborted) return;
+
       // Debug log collector
       // - Collapses all agent_message_chunk events into one growing entry
       // - Filters out stdout-guard stderr noise (redundant with chunk events)
@@ -200,8 +200,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
           setDebugLog((prev) => {
             if (isChunk) {
               const text = (update?.text as string) ?? '';
-              // Find last chunk group in the array (may not be the last entry)
-              const lastChunkIdx = prev.findLastIndex((e) => (e as { _isChunkGroup?: boolean })._isChunkGroup);
+              // Find last active chunk group
+              const lastChunkIdx = prev.findLastIndex((e) => e.isChunkGroup);
               if (lastChunkIdx >= 0) {
                 const existing = prev[lastChunkIdx];
                 const updated = { ...existing, message: (existing.message as string) + text, timestamp: event.payload.timestamp };
@@ -213,17 +213,15 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
               debugCounterRef.current += 1;
               return [
                 ...prev.slice(-MAX_DEBUG_LOG_ENTRIES),
-                { id: debugCounterRef.current, direction: 'agent→host', message: text, timestamp: event.payload.timestamp, _isChunkGroup: true } as DebugEntry & { _isChunkGroup: boolean },
+                { id: debugCounterRef.current, direction: 'agent→host', message: text, timestamp: event.payload.timestamp, isChunkGroup: true },
               ];
             }
 
-            // Non-chunk event — if there's an active chunk group, close it by clearing the flag
-            // Actually, we want chunks from one turn to merge. Reset on prompt_complete.
+            // On prompt_complete, close active chunk groups
             if (update?.sessionUpdate === 'prompt_complete') {
-              // Mark all chunk groups as closed by removing flag
               const closed = prev.map((e) => {
-                if ((e as { _isChunkGroup?: boolean })._isChunkGroup) {
-                  const { _isChunkGroup: _, ...rest } = e as DebugEntry & { _isChunkGroup: boolean };
+                if (e.isChunkGroup) {
+                  const { isChunkGroup: _, ...rest } = e;
                   return { ...rest, message: `📝 ${rest.message}` };
                 }
                 return e;
@@ -244,6 +242,31 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         },
       ));
 
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
+
+      // Connection status events from Tauri backend
+      cleanups.push(await listen<{ status: string; message?: string }>('connection-status', (event) => {
+        const { status, message } = event.payload;
+        if (status === 'connected') {
+          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
+          dispatch({ type: 'CLEAR_ERROR' });
+        } else if (status === 'disconnected') {
+          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'disconnected' });
+          dispatch({ type: 'SET_ERROR', error: message ?? 'Agent disconnected' });
+        } else if (status === 'reconnecting') {
+          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'reconnecting' });
+          // Attempt reconnect from frontend
+          invoke('connect_agent_cmd').catch(() => {
+            // Reconnect failed — status will be updated by next event
+          });
+        } else if (status === 'error') {
+          dispatch({ type: 'SET_CONNECTION_STATUS', status: 'error' });
+          dispatch({ type: 'SET_ERROR', error: message ?? 'Connection error' });
+        }
+      }));
+
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
+
       // Session lifecycle
       cleanups.push(await listen('session-lifecycle', (event: { payload: unknown }) => {
         const payload = event.payload as Record<string, unknown>;
@@ -256,12 +279,16 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         }
       }));
 
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
+
       // Agent errors
       cleanups.push(await listen('agent-error', (event: { payload: unknown }) => {
         const payload = event.payload as Record<string, unknown>;
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
         dispatch({ type: 'SET_ERROR', error: (payload.message as string) ?? 'Unknown error' });
       }));
+
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
 
       // Streamed text chunks
       cleanups.push(await listen<{ text: string }>('agent-message-chunk', (event) => {
@@ -272,6 +299,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         }
         dispatch({ type: 'APPEND_TEXT', text: event.payload.text });
       }));
+
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
 
       // Tool call announced
       cleanups.push(await listen<{ toolCallId: string; title: string; kind: string; input: Record<string, unknown> }>(
@@ -285,6 +314,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         },
       ));
 
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
+
       // Tool call completed
       cleanups.push(await listen<{ toolCallId: string; status: string; rawOutput?: string }>(
         'tool-call-update',
@@ -297,6 +328,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
           });
         },
       ));
+
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
 
       // Token usage
       cleanups.push(await listen<{ cost: number; input_tokens: number; output_tokens: number; total_tokens: number; duration_ms: number }>(
@@ -315,6 +348,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         },
       ));
 
+      if (controller.signal.aborted) { cleanups.forEach((fn) => fn()); return; }
+
       // Prompt complete — turn finished
       cleanups.push(await listen('prompt-complete', () => {
         dispatch({ type: 'SET_CONNECTION_STATUS', status: 'connected' });
@@ -323,8 +358,11 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
       }));
     };
 
-    if (!cancelled) setup();
-    return () => { cancelled = true; cleanups.forEach((fn) => fn()); };
+    setup();
+    return () => {
+      controller.abort();
+      cleanups.forEach((fn) => fn());
+    };
   }, []);
 
   return <AgentContext.Provider value={{ state, dispatch, debugLog }}>{children}</AgentContext.Provider>;

@@ -5,6 +5,7 @@
   "permissions": [
     "core:default",
     "dialog:default",
+    "stronghold:default",
     {
       "identifier": "shell:allow-spawn",
       "allow": [

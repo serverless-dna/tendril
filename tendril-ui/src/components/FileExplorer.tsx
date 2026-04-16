@@ -49,6 +49,7 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
   const [error, setError] = useState<string | null>(null);
   const editorContentRef = useRef<string | null>(null);
   const [viewMode, setViewMode] = useState<'code' | 'doc'>('code');
+  const [fileLoading, setFileLoading] = useState(false);
 
   const isMarkdown = selectedFile?.name.endsWith('.md') ?? false;
   const isDirty = editedContent !== null && selectedFile !== null && editedContent !== selectedFile.content;
@@ -78,6 +79,9 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
     if (entry.is_dir) {
       await loadDirectory(entry.path);
     } else {
+      // Debounce: ignore clicks while a file read is in progress
+      if (fileLoading) return;
+      setFileLoading(true);
       try {
         const content = await invoke<string>('read_file_content', { filePath: entry.path });
         setSelectedFile({ name: entry.name, path: entry.path, content });
@@ -85,12 +89,16 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
         editorContentRef.current = null;
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setFileLoading(false);
       }
     }
   };
 
   const handleSave = useCallback(async () => {
     if (!selectedFile || editorContentRef.current === null) return;
+    // Confirmation before overwriting
+    if (!window.confirm(`Save changes to ${selectedFile.name}?`)) return;
     const content = editorContentRef.current;
     setSaving(true);
     try {
@@ -254,7 +262,7 @@ export function FileExplorer({ workspacePath }: FileExplorerProps) {
               </div>
               {isMarkdown && viewMode === 'doc' ? (
                 <div className="flex-1 min-h-0 overflow-auto p-6 prose prose-invert prose-sm max-w-none">
-                  <Streamdown plugins={streamdownPlugins}>{selectedFile.content}</Streamdown>
+                <Streamdown plugins={streamdownPlugins}>{editedContent ?? selectedFile.content}</Streamdown>
                 </div>
               ) : (
                 <CodeEditor

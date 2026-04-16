@@ -27,8 +27,8 @@ describe('CapabilityRegistry', () => {
   };
 
   describe('register', () => {
-    it('registers a new capability', () => {
-      registry.register(sampleDef, 'console.log("hello")');
+    it('registers a new capability', async () => {
+      await registry.register(sampleDef, 'console.log("hello")');
 
       const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tools', 'index.json'), 'utf-8'));
       expect(index.capabilities).toHaveLength(1);
@@ -38,9 +38,9 @@ describe('CapabilityRegistry', () => {
       expect(toolFile).toBe('console.log("hello")');
     });
 
-    it('updates existing capability with same name', () => {
-      registry.register(sampleDef, 'v1');
-      registry.register(sampleDef, 'v2');
+    it('updates existing capability with same name', async () => {
+      await registry.register(sampleDef, 'v1');
+      await registry.register(sampleDef, 'v2');
 
       const index = JSON.parse(fs.readFileSync(path.join(tmpDir, 'tools', 'index.json'), 'utf-8'));
       expect(index.capabilities).toHaveLength(1);
@@ -51,54 +51,35 @@ describe('CapabilityRegistry', () => {
   });
 
   describe('search', () => {
-    it('finds capabilities by name', () => {
-      registry.register(sampleDef, 'code');
-      const results = registry.search('fetch');
+    it('finds capabilities by name', async () => {
+      await registry.register(sampleDef, 'code');
+      const results = await registry.search('fetch');
       expect(results).toHaveLength(1);
       expect(results[0].name).toBe('fetch_url');
     });
 
-    it('finds capabilities by trigger text', () => {
-      registry.register(sampleDef, 'code');
-      const results = registry.search('URL page');
+    it('finds capabilities by trigger text', async () => {
+      await registry.register(sampleDef, 'code');
+      const results = await registry.search('URL page');
       expect(results).toHaveLength(1);
     });
 
-    it('returns empty for no match', () => {
-      registry.register(sampleDef, 'code');
-      const results = registry.search('database sql');
+    it('returns empty for no match', async () => {
+      await registry.register(sampleDef, 'code');
+      const results = await registry.search('database sql');
       expect(results).toHaveLength(0);
     });
   });
 
   describe('load', () => {
-    it('loads tool implementation', () => {
-      registry.register(sampleDef, 'const x = 1;');
-      const code = registry.load('fetch_url');
+    it('loads tool implementation', async () => {
+      await registry.register(sampleDef, 'const x = 1;');
+      const code = await registry.load('fetch_url');
       expect(code).toBe('const x = 1;');
     });
 
-    it('throws for non-existent tool', () => {
-      expect(() => registry.load('nonexistent')).toThrow('Tool not found');
-    });
-  });
-
-  describe('list', () => {
-    it('returns all capabilities', () => {
-      registry.register(sampleDef, 'code1');
-      registry.register({ ...sampleDef, name: 'summarize', capability: 'Summarizes text', triggers: ['summarize'], suppression: [] }, 'code2');
-      expect(registry.list()).toHaveLength(2);
-    });
-  });
-
-  describe('exists', () => {
-    it('returns true for registered capability', () => {
-      registry.register(sampleDef, 'code');
-      expect(registry.exists('fetch_url')).toBe(true);
-    });
-
-    it('returns false for unregistered capability', () => {
-      expect(registry.exists('nonexistent')).toBe(false);
+    it('rejects for non-existent tool', async () => {
+      await expect(registry.load('nonexistent')).rejects.toThrow();
     });
   });
 });

@@ -16,13 +16,37 @@ export interface CapabilityIndex {
   capabilities: CapabilityDefinition[];
 }
 
-// === Workspace Config Types ===
+// === Provider Types ===
 
-export interface ModelConfig {
-  provider: string;
+export type Provider = 'bedrock' | 'ollama' | 'openai' | 'anthropic';
+
+export interface BedrockConfig {
   modelId: string;
   region: string;
   profile?: string;
+}
+
+export interface OllamaConfig {
+  host: string;
+  modelId: string;
+}
+
+export interface OpenAIConfig {
+  modelId: string;
+}
+
+export interface AnthropicConfig {
+  modelId: string;
+}
+
+// === Workspace Config Types ===
+
+export interface ModelConfig {
+  provider: Provider;
+  bedrock?: BedrockConfig;
+  ollama?: OllamaConfig;
+  openai?: OpenAIConfig;
+  anthropic?: AnthropicConfig;
 }
 
 export interface SandboxConfig {

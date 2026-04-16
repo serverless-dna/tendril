@@ -10,14 +10,29 @@ export interface Capability {
   version?: string;
 }
 
+/** Provider type */
+export type Provider = 'bedrock' | 'ollama' | 'openai' | 'anthropic';
+
 /** App configuration as stored in ~/.tendril/config.json */
 export interface AppConfig {
   workspace?: string;
   model: {
-    provider?: string;
-    modelId: string;
-    region: string;
-    profile?: string;
+    provider: Provider;
+    bedrock?: {
+      modelId: string;
+      region: string;
+      profile?: string;
+    };
+    ollama?: {
+      host: string;
+      modelId: string;
+    };
+    openai?: {
+      modelId: string;
+    };
+    anthropic?: {
+      modelId: string;
+    };
   };
   sandbox: {
     denoPath?: string;

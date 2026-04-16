@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use std::sync::OnceLock;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -19,16 +19,10 @@ pub enum AcpError {
     ShellError(String),
 }
 
-struct AgentProcess {
-    child: CommandChild,
-    prompt_counter: u32,
-    app: AppHandle,
-}
-
-static AGENT: OnceLock<Mutex<Option<AgentProcess>>> = OnceLock::new();
-
-fn agent_state() -> &'static Mutex<Option<AgentProcess>> {
-    AGENT.get_or_init(|| Mutex::new(None))
+pub struct AgentProcess {
+    pub child: CommandChild,
+    pub prompt_counter: u32,
+    pub app: AppHandle,
 }
 
 /// Resolve the deno sidecar path: try resource dir (production), then cwd/binaries (dev), then PATH
@@ -37,10 +31,10 @@ fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
         app.path()
             .resource_dir()
             .ok()
-            .map(|d| d.join("binaries").join(format!("deno-{target_triple}"))),
+            .map(|d: std::path::PathBuf| d.join("binaries").join(format!("deno-{target_triple}"))),
         std::env::current_dir()
             .ok()
-            .map(|d| d.join("binaries").join(format!("deno-{target_triple}"))),
+            .map(|d: std::path::PathBuf| d.join("binaries").join(format!("deno-{target_triple}"))),
     ];
 
     for path in candidates.iter().flatten() {
@@ -52,9 +46,13 @@ fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
     "deno".to_string()
 }
 
-pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
+pub async fn connect_agent(
+    app: &AppHandle,
+    agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+    env_vars: Option<Vec<(String, String)>>,
+) -> Result<(), AcpError> {
     // Hold lock through entire init to prevent race condition
-    let mut state = agent_state().lock().await;
+    let mut state = agent_mutex.lock().await;
     if state.is_some() {
         eprintln!("[acp] Agent already connected — skipping");
         return Ok(());
@@ -83,16 +81,29 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
     eprintln!("[acp] Deno path: {deno_path}");
 
     // Write deno path into config so the agent can read it
-    if let Ok(mut cfg) = crate::read_app_config_inner() {
+    if let Ok(mut cfg) = crate::read_app_config_inner().await {
         if let Some(sandbox) = cfg.get_mut("sandbox").and_then(|s| s.as_object_mut()) {
             sandbox.insert("denoPath".to_string(), serde_json::json!(deno_path));
-            let _ = crate::write_app_config_inner(&cfg);
+            let _ = crate::write_app_config_inner(&cfg).await;
         }
     }
 
-    let cmd = shell
+    let mut cmd = shell
         .sidecar("tendril-agent")
         .map_err(|e| AcpError::ShellError(e.to_string()))?;
+
+    // Inject environment variables passed from the frontend (e.g., API keys from Stronghold)
+    if let Some(vars) = &env_vars {
+        for (key, value) in vars {
+            // FR-018: Env var takes precedence — only inject if not already set in parent process
+            if std::env::var(key).is_err() {
+                cmd = cmd.env(key, value);
+                eprintln!("[acp] Injected env var: {key}");
+            } else {
+                eprintln!("[acp] {key} already set in environment — skipping injection");
+            }
+        }
+    }
 
     let (mut rx, child) = cmd
         .spawn()
@@ -112,6 +123,7 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
 
     // Spawn task to read agent stdout and forward as Tauri events
     let app_clone = app.clone();
+    let reconnect_mutex = Arc::clone(agent_mutex);
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
@@ -136,10 +148,42 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
                 }
                 CommandEvent::Terminated(payload) => {
                     eprintln!("[acp] Agent terminated: code={:?}", payload.code);
-                    let _ = app_clone.emit("agent-debug", json!({
-                        "direction": "system",
-                        "message": format!("Agent process terminated with code {:?}", payload.code),
-                    }));
+                    let _ = app_clone.emit(
+                        "agent-debug",
+                        json!({
+                            "direction": "system",
+                            "message": format!("Agent process terminated with code {:?}", payload.code),
+                        }),
+                    );
+
+                    // Emit connection-status disconnected
+                    let _ = app_clone.emit(
+                        "connection-status",
+                        json!({
+                            "status": "disconnected",
+                            "message": format!("Agent process terminated with code {:?}", payload.code),
+                            "timestamp": chrono_now(),
+                        }),
+                    );
+
+                    // Clear agent state
+                    {
+                        let mut guard = reconnect_mutex.lock().await;
+                        *guard = None;
+                    }
+
+                    // Emit reconnect-needed — the frontend will trigger
+                    // connect_agent_cmd after a delay, which avoids Send issues
+                    // with nested sidecar spawning in async tasks.
+                    let _ = app_clone.emit(
+                        "connection-status",
+                        json!({
+                            "status": "reconnecting",
+                            "message": "Agent terminated. Attempting reconnect...",
+                            "timestamp": chrono_now(),
+                        }),
+                    );
+
                     break;
                 }
                 CommandEvent::Error(msg) => {
@@ -162,13 +206,15 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
             "capabilities": {}
         }
     });
-    write_to_agent_logged(app, &init_msg).await?;
+    write_to_agent_logged(app, agent_mutex, &init_msg).await?;
 
     // Brief delay to allow initialize response
+    // TODO: Replace with actual response wait (tracking init-1 response via events)
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Read workspace path from app config
     let workspace = crate::read_app_config_inner()
+        .await
         .ok()
         .and_then(|c| {
             c.get("workspace")
@@ -192,17 +238,30 @@ pub async fn connect_agent(app: &AppHandle) -> Result<(), AcpError> {
             "workingDirectory": workspace
         }
     });
-    write_to_agent_logged(app, &session_msg).await?;
+    write_to_agent_logged(app, agent_mutex, &session_msg).await?;
+
+    // Emit connected status
+    let _ = app.emit(
+        "connection-status",
+        json!({
+            "status": "connected",
+            "timestamp": chrono_now(),
+        }),
+    );
 
     eprintln!("[acp] Init sequence sent (initialize + new_session)");
 
     Ok(())
 }
 
-async fn write_to_agent_logged(app: &AppHandle, msg: &Value) -> Result<(), AcpError> {
+pub async fn write_to_agent_logged(
+    app: &AppHandle,
+    agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+    msg: &Value,
+) -> Result<(), AcpError> {
     log_host_to_agent(app, msg);
 
-    let mut state = agent_state().lock().await;
+    let mut state = agent_mutex.lock().await;
     let agent = state.as_mut().ok_or(AcpError::NotConnected)?;
 
     let line = format!(
@@ -218,21 +277,16 @@ async fn write_to_agent_logged(app: &AppHandle, msg: &Value) -> Result<(), AcpEr
     Ok(())
 }
 
-async fn write_to_agent(msg: &Value) -> Result<(), AcpError> {
-    let app = {
-        let state = agent_state().lock().await;
-        let agent = state.as_ref().ok_or(AcpError::NotConnected)?;
-        agent.app.clone()
-    };
-    write_to_agent_logged(&app, msg).await
-}
-
-pub async fn restart_agent(app: &AppHandle) -> Result<(), AcpError> {
+pub async fn restart_agent(
+    app: &AppHandle,
+    agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+    env_vars: Option<Vec<(String, String)>>,
+) -> Result<(), AcpError> {
     eprintln!("[acp] Restarting agent sidecar...");
 
     // Kill existing process
     {
-        let mut state = agent_state().lock().await;
+        let mut state = agent_mutex.lock().await;
         if let Some(agent) = state.take() {
             let _ = agent.child.kill();
             eprintln!("[acp] Killed previous agent process");
@@ -243,37 +297,57 @@ pub async fn restart_agent(app: &AppHandle) -> Result<(), AcpError> {
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Reconnect
-    connect_agent(app).await
+    connect_agent(app, agent_mutex, env_vars).await
 }
 
-pub async fn send_prompt(text: &str) -> Result<(), AcpError> {
-    let prompt_id = {
-        let mut state = agent_state().lock().await;
+pub async fn send_prompt(
+    text: &str,
+    agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+) -> Result<(), AcpError> {
+    let (prompt_id, app) = {
+        let mut state = agent_mutex.lock().await;
         let agent = state.as_mut().ok_or(AcpError::NotConnected)?;
         agent.prompt_counter += 1;
-        format!("prompt-{}", agent.prompt_counter)
+        (
+            format!("prompt-{}", agent.prompt_counter),
+            agent.app.clone(),
+        )
     };
 
-    write_to_agent(&json!({
-        "jsonrpc": "2.0",
-        "id": prompt_id,
-        "method": "prompt",
-        "params": {
-            "sessionId": "current",
-            "messages": [{
-                "role": "user",
-                "content": [{ "type": "text", "text": text }]
-            }]
-        }
-    }))
+    write_to_agent_logged(
+        &app,
+        agent_mutex,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": prompt_id,
+            "method": "prompt",
+            "params": {
+                "sessionId": "current",
+                "messages": [{
+                    "role": "user",
+                    "content": [{ "type": "text", "text": text }]
+                }]
+            }
+        }),
+    )
     .await
 }
 
-pub async fn send_cancel() -> Result<(), AcpError> {
-    write_to_agent(&json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/cancelled",
-        "params": { "requestId": "current" }
-    }))
+pub async fn send_cancel(agent_mutex: &Arc<Mutex<Option<AgentProcess>>>) -> Result<(), AcpError> {
+    let app = {
+        let state = agent_mutex.lock().await;
+        let agent = state.as_ref().ok_or(AcpError::NotConnected)?;
+        agent.app.clone()
+    };
+
+    write_to_agent_logged(
+        &app,
+        agent_mutex,
+        &json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/cancelled",
+            "params": { "requestId": "current" }
+        }),
+    )
     .await
 }

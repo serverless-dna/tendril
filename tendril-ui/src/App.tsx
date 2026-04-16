@@ -9,6 +9,7 @@ import { DebugPanel } from './components/DebugPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { useCapabilities } from './hooks/useCapabilities';
 import type { AppConfig } from './types';
+import { hasApiKey, saveApiKey, getAgentEnvVars } from './stronghold';
 
 type Tab = 'chat' | 'capabilities' | 'workspace' | 'settings';
 
@@ -37,7 +38,8 @@ function AppContent() {
         setHasWorkspace(true);
         const prompt = await invoke<string>('get_system_prompt');
         setSystemPrompt(prompt);
-        await invoke('connect_agent_cmd');
+        const envVars = await getAgentEnvVars(cfg.model?.provider ?? 'bedrock');
+        await invoke('connect_agent_cmd', { envVars: envVars.length > 0 ? envVars : null });
       } else {
         setHasWorkspace(false);
       }
@@ -52,14 +54,24 @@ function AppContent() {
     const cfg = await invoke<AppConfig>('read_config');
     setConfig(cfg);
     setHasWorkspace(true);
-    await invoke('connect_agent_cmd');
+    await invoke('connect_agent_cmd', { envVars: null });
   };
 
   const handleSaveConfig = async (partial: Partial<AppConfig>) => {
-    const merged = deepMerge(config ?? {}, partial as Record<string, unknown>);
+    const current = config ?? {};
+    // Typed field-level merge for AppConfig
+    const merged: AppConfig = {
+      ...current,
+      ...partial,
+      model: { ...(current as AppConfig).model, ...partial.model },
+      sandbox: { ...(current as AppConfig).sandbox, ...partial.sandbox },
+      registry: { ...(current as AppConfig).registry, ...partial.registry },
+      agent: { ...(current as AppConfig).agent, ...partial.agent },
+    } as AppConfig;
     await invoke('write_config', { config: merged });
-    setConfig(merged as AppConfig);
-    await invoke('restart_agent');
+    setConfig(merged);
+    const envVars = await getAgentEnvVars(merged.model?.provider ?? 'bedrock');
+    await invoke('restart_agent', { envVars: envVars.length > 0 ? envVars : null });
   };
 
   if (hasWorkspace === null) {
@@ -91,7 +103,6 @@ function AppContent() {
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id);
-                if (tab.id === 'capabilities') refreshCaps();
               }}
               className={`px-4 py-2 text-sm font-medium border-b-2 ${
                 activeTab === tab.id
@@ -120,23 +131,31 @@ function AppContent() {
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 overflow-hidden">
-          {activeTab === 'chat' && <ChatView draft={chatDraft} onDraftChange={setChatDraft} />}
-          {activeTab === 'capabilities' && (
+          <div className={activeTab === 'chat' ? 'h-full' : 'hidden'}>
+            <ChatView draft={chatDraft} onDraftChange={setChatDraft} />
+          </div>
+          <div className={activeTab === 'capabilities' ? 'h-full' : 'hidden'}>
             <CapabilityBrowser
               capabilities={capabilities}
               loading={capsLoading}
               onRefresh={refreshCaps}
               workspacePath={workspacePath}
             />
-          )}
-          {activeTab === 'workspace' && <FileExplorer workspacePath={workspacePath} />}
-          {activeTab === 'settings' && config && (
-            <SettingsPanel
-              config={config}
-              systemPrompt={systemPrompt}
-              onSave={handleSaveConfig}
-            />
-          )}
+          </div>
+          <div className={activeTab === 'workspace' ? 'h-full' : 'hidden'}>
+            <FileExplorer workspacePath={workspacePath} />
+          </div>
+          <div className={activeTab === 'settings' ? 'h-full' : 'hidden'}>
+            {config && (
+              <SettingsPanel
+                config={config}
+                systemPrompt={systemPrompt}
+                onSave={handleSaveConfig}
+                hasApiKey={hasApiKey}
+                saveApiKey={saveApiKey}
+              />
+            )}
+          </div>
         </div>
 
         {/* Debug side panel */}
@@ -150,28 +169,51 @@ function AppContent() {
   );
 }
 
-function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    if (
-      source[key] !== null &&
-      typeof source[key] === 'object' &&
-      !Array.isArray(source[key]) &&
-      typeof target[key] === 'object' &&
-      target[key] !== null
-    ) {
-      result[key] = deepMerge(target[key] as Record<string, unknown>, source[key] as Record<string, unknown>);
-    } else if (source[key] !== undefined) {
-      result[key] = source[key];
-    }
+/** Top-level error boundary to prevent white-screen crashes */
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
   }
-  return result;
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary]', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen bg-gray-950 text-gray-300 p-8">
+          <h1 className="text-xl font-bold text-red-400 mb-4">Something went wrong</h1>
+          <p className="text-sm text-gray-400 mb-2 max-w-lg text-center">
+            {this.state.error?.message ?? 'An unexpected error occurred'}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export default function App() {
   return (
-    <AgentProvider>
-      <AppContent />
-    </AgentProvider>
+    <ErrorBoundary>
+      <AgentProvider>
+        <AppContent />
+      </AgentProvider>
+    </ErrorBoundary>
   );
 }
