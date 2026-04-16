@@ -546,7 +546,6 @@ async fn write_app_config_inner(config: &Value) -> Result<(), String> {
     Ok(())
 }
 
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
