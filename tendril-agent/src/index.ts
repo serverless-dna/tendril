@@ -1,13 +1,9 @@
 import { readConfig } from './config.js';
-import { createAgent } from './agent.js';
+import { createAgent, createModel } from './agent.js';
 import { writeSystemPrompt } from './prompt.js';
 import { startProtocolLoop, emitUpdate } from './protocol.js';
 import type { ProtocolContext } from './protocol.js';
-
-// Claude Sonnet 4.5 pricing (USD per token)
-const INPUT_COST_PER_TOKEN = 0.000003;
-const OUTPUT_COST_PER_TOKEN = 0.000015;
-const MODEL_CONTEXT_LIMIT = 200_000;
+import { PROVIDER_COSTS, getActiveModelId } from './costs.js';
 
 // Guard stdout — only allow JSON writes. Strands SDK sometimes writes raw text.
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -27,11 +23,23 @@ async function main() {
   const workspaceArg = process.argv[2] || undefined;
   const { config, workspace: workspacePath } = await readConfig(workspaceArg);
 
+  const provider = config.model.provider;
+  const modelId = getActiveModelId(config);
+  const costs = PROVIDER_COSTS[provider];
+
+  // Provider-aware startup logging (FR-012)
   process.stderr.write(`[tendril-agent] workspace: ${workspacePath}\n`);
-  process.stderr.write(`[tendril-agent] model: ${config.model.modelId} (${config.model.region})\n`);
+  process.stderr.write(`[tendril-agent] provider: ${provider}\n`);
+  process.stderr.write(`[tendril-agent] model: ${modelId}\n`);
   process.stderr.write(`[tendril-agent] deno: ${config.sandbox.denoPath}\n`);
-  if (config.model.profile) {
-    process.stderr.write(`[tendril-agent] AWS profile: ${config.model.profile}\n`);
+  if (provider === 'bedrock' && config.model.bedrock?.region) {
+    process.stderr.write(`[tendril-agent] region: ${config.model.bedrock.region}\n`);
+  }
+  if (provider === 'bedrock' && config.model.bedrock?.profile) {
+    process.stderr.write(`[tendril-agent] AWS profile: ${config.model.bedrock.profile}\n`);
+  }
+  if (provider === 'ollama' && config.model.ollama?.host) {
+    process.stderr.write(`[tendril-agent] ollama host: ${config.model.ollama.host}\n`);
   }
 
   // Write system prompt to shared file for Rust backend to read
@@ -77,8 +85,14 @@ async function main() {
         const message = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[tendril-agent] Error: ${message}\n`);
 
-        if (isAuthError(message)) {
-          emitUpdate({ sessionUpdate: 'error', message: `Bedrock authentication failed: ${message}` });
+        // Provider-generic error handling
+        if (provider === 'ollama' && isOllamaConnectionError(message)) {
+          const host = config.model.ollama?.host ?? 'unknown';
+          emitUpdate({ sessionUpdate: 'error', message: `Ollama is not running or unreachable at ${host}` });
+        } else if (provider === 'ollama' && isOllamaModelNotFound(message)) {
+          emitUpdate({ sessionUpdate: 'error', message: `Model ${modelId} not found in Ollama. Run: ollama pull ${modelId}` });
+        } else if (isAuthError(message)) {
+          emitUpdate({ sessionUpdate: 'error', message: `${provider} authentication failed: ${message}` });
         } else {
           emitUpdate({ sessionUpdate: 'error', message });
         }
@@ -193,8 +207,8 @@ async function main() {
       duration_ms: durationMs,
     });
 
-    const inputCost = inputTokens * INPUT_COST_PER_TOKEN;
-    const outputCost = outputTokens * OUTPUT_COST_PER_TOKEN;
+    const inputCost = inputTokens * costs.inputCostPerToken;
+    const outputCost = outputTokens * costs.outputCostPerToken;
 
     emitUpdate({
       sessionUpdate: 'query_result',
@@ -206,7 +220,7 @@ async function main() {
       total_tokens: totalTokens,
       duration_ms: durationMs,
       context_tokens: inputTokens,
-      context_limit: MODEL_CONTEXT_LIMIT,
+      context_limit: costs.contextLimit,
     });
 
     emitUpdate({
@@ -216,8 +230,17 @@ async function main() {
   }
 
   function isAuthError(message: string): boolean {
-    const authPatterns = ['UnrecognizedClientException', 'AccessDeniedException', 'ExpiredTokenException', 'credentials', 'security token'];
+    const authPatterns = ['UnrecognizedClientException', 'AccessDeniedException', 'ExpiredTokenException', 'credentials', 'security token', 'Incorrect API key', '401', 'authentication_error'];
     return authPatterns.some((p) => message.toLowerCase().includes(p.toLowerCase()));
+  }
+
+  function isOllamaConnectionError(message: string): boolean {
+    const patterns = ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'fetch failed', 'network error'];
+    return patterns.some((p) => message.toLowerCase().includes(p.toLowerCase()));
+  }
+
+  function isOllamaModelNotFound(message: string): boolean {
+    return message.includes('404') || message.toLowerCase().includes('model') && message.toLowerCase().includes('not found');
   }
 
   startProtocolLoop(ctx);

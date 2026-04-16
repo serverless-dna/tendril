@@ -67,8 +67,9 @@ async fn cancel_prompt(state: tauri::State<'_, AgentState>) -> Result<(), String
 async fn connect_agent_cmd(
     app: tauri::AppHandle,
     state: tauri::State<'_, AgentState>,
+    env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), String> {
-    acp::connect_agent(&app, &state.0)
+    acp::connect_agent(&app, &state.0, env_vars)
         .await
         .map_err(|e| e.to_string())
 }
@@ -77,8 +78,9 @@ async fn connect_agent_cmd(
 async fn restart_agent(
     app: tauri::AppHandle,
     state: tauri::State<'_, AgentState>,
+    env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), String> {
-    acp::restart_agent(&app, &state.0)
+    acp::restart_agent(&app, &state.0, env_vars)
         .await
         .map_err(|e| e.to_string())
 }
@@ -173,6 +175,20 @@ async fn read_config() -> Result<Value, String> {
     read_app_config_inner().await
 }
 
+/// Helper: validate a JSON field is a non-empty string.
+fn validate_non_empty_string(parent: &Value, field: &str, label: &str) -> Result<(), String> {
+    match parent.get(field) {
+        Some(v) => match v.as_str() {
+            Some(s) if s.is_empty() => {
+                Err(format!("Config validation: {label} must not be empty"))
+            }
+            Some(_) => Ok(()),
+            None => Err(format!("Config validation: {label} must be a string")),
+        },
+        None => Err(format!("Config validation: {label} is required")),
+    }
+}
+
 /// Validate known config field types before writing.
 fn validate_config_payload(config: &Value) -> Result<(), String> {
     if let Some(workspace) = config.get("workspace").and_then(|w| w.as_str()) {
@@ -184,6 +200,44 @@ fn validate_config_payload(config: &Value) -> Result<(), String> {
             return Err(format!(
                 "Config validation: workspace must not be a system directory: {workspace}"
             ));
+        }
+    }
+    // Validate model.provider enum and nested provider blocks
+    if let Some(model) = config.get("model") {
+        if let Some(provider) = model.get("provider").and_then(|p| p.as_str()) {
+            let valid_providers = ["bedrock", "ollama", "openai", "anthropic"];
+            if !valid_providers.contains(&provider) {
+                return Err(format!(
+                    "Config validation: model.provider must be one of: {}",
+                    valid_providers.join(", ")
+                ));
+            }
+            // Validate the active provider's nested block exists
+            if model.get(provider).is_none() || !model.get(provider).unwrap().is_object() {
+                return Err(format!(
+                    "Config validation: model.{provider} config block is required when provider is {provider}"
+                ));
+            }
+            // Validate required fields per active provider
+            if let Some(block) = model.get(provider) {
+                match provider {
+                    "bedrock" => {
+                        validate_non_empty_string(block, "modelId", &format!("model.bedrock.modelId"))?;
+                        validate_non_empty_string(block, "region", &format!("model.bedrock.region"))?;
+                    }
+                    "ollama" => {
+                        validate_non_empty_string(block, "host", "model.ollama.host")?;
+                        validate_non_empty_string(block, "modelId", "model.ollama.modelId")?;
+                    }
+                    "openai" => {
+                        validate_non_empty_string(block, "modelId", "model.openai.modelId")?;
+                    }
+                    "anthropic" => {
+                        validate_non_empty_string(block, "modelId", "model.anthropic.modelId")?;
+                    }
+                    _ => {} // Already validated above
+                }
+            }
         }
     }
     if let Some(sandbox) = config.get("sandbox") {
@@ -487,11 +541,24 @@ async fn write_app_config_inner(config: &Value) -> Result<(), String> {
     Ok(())
 }
 
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(
+            // Stronghold vault for secure API key storage.
+            // with_argon2 expects a path to a salt file — it creates one if missing.
+            // We use the home dir .tendril folder so the salt persists.
+            tauri_plugin_stronghold::Builder::with_argon2(
+                &dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("/tmp"))
+                    .join(".tendril")
+                    .join("stronghold-salt.txt"),
+            )
+            .build(),
+        )
         .manage(AgentState(Arc::new(Mutex::new(None))))
         .invoke_handler(tauri::generate_handler![
             send_prompt,

@@ -1,13 +1,12 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 1.0.0 → 2.0.0 (architecture change: all-TypeScript agent)
+  Version change: 2.0.1 → 2.1.0 (MINOR: multi-provider support)
   Modified principles:
-    - VI. Test-First: Rust crate references → TypeScript + Tauri Rust shell
+    - VII. Simplicity: "single provider" constraint relaxed to permit multi-provider via discriminated config
   Modified sections:
-    - Technology Stack Constraints: Agent runtime Rust → Node.js SEA (TypeScript)
-    - Technology Stack Constraints: Removed Tokio, serde rows; added Strands SDK, esbuild
-    - Development Workflow: Removed crate build order, thiserror/anyhow; added TS equivalents
+    - Technology Stack Constraints: Inference provider row expanded from Bedrock-only to 4 providers
+    - Technology Stack Constraints: Added Tauri Stronghold row for secure credential storage
   Templates requiring updates:
     - .specify/templates/plan-template.md — ✅ compatible
     - .specify/templates/spec-template.md — ✅ compatible
@@ -126,8 +125,9 @@ unless a concrete and immediate need exists.
 - Four bootstrap tools only: searchCapabilities, registerCapability,
   loadTool, execute. Additional hardcoded tools are a constitution
   violation until explicitly amended.
-- Single workspace, single user, single provider. Multi-anything is
-  out of scope until this constitution is amended.
+- Single workspace, single user. Multi-provider inference is permitted
+  via a discriminated config pattern (provider selector + per-provider
+  config blocks). Other multi-anything remains out of scope.
 - Prefer explicit code over clever abstractions. Three similar
   functions are better than one generic function with three modes.
 
@@ -140,7 +140,8 @@ unless a concrete and immediate need exists.
 | Styling | TailwindCSS v4 | MUST be the sole styling system; no CSS-in-JS or CSS modules |
 | Agent runtime | Node.js SEA (TypeScript) | MUST communicate via NDJSON/JSON-RPC 2.0 over stdio |
 | Agent framework | @strands-agents/sdk | Strands SDK handles agentic loop and Bedrock provider |
-| Inference provider | AWS Bedrock (via Strands BedrockModel) | Standard AWS credential chain; no hardcoded credentials |
+| Inference provider | Bedrock, Ollama, OpenAI, Anthropic (via Strands SDK model classes) | Bedrock uses AWS credential chain; OpenAI/Anthropic keys in Stronghold vault; Ollama uses OpenAI-compat API |
+| Credential storage | Tauri Stronghold (`tauri-plugin-stronghold`) | Encrypted vault for API keys; argon2 password hashing; keys injected as env vars at agent spawn |
 | Code sandbox | Deno (bundled sidecar) | Permission flags as sandbox boundary; spawned via child_process |
 | Agent bundler | esbuild + Node SEA | Single CJS bundle injected into Node binary |
 
@@ -183,4 +184,4 @@ validations MUST verify compliance with these principles.
   Constitution Check section confirming alignment with these
   principles before implementation begins.
 
-**Version**: 2.0.1 | **Ratified**: 2026-04-11 | **Last Amended**: 2026-04-11
+**Version**: 2.1.0 | **Ratified**: 2026-04-11 | **Last Amended**: 2026-04-16

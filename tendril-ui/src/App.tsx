@@ -9,6 +9,7 @@ import { DebugPanel } from './components/DebugPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { useCapabilities } from './hooks/useCapabilities';
 import type { AppConfig } from './types';
+import { hasApiKey, saveApiKey, getAgentEnvVars } from './stronghold';
 
 type Tab = 'chat' | 'capabilities' | 'workspace' | 'settings';
 
@@ -37,7 +38,8 @@ function AppContent() {
         setHasWorkspace(true);
         const prompt = await invoke<string>('get_system_prompt');
         setSystemPrompt(prompt);
-        await invoke('connect_agent_cmd');
+        const envVars = await getAgentEnvVars(cfg.model?.provider ?? 'bedrock');
+        await invoke('connect_agent_cmd', { envVars: envVars.length > 0 ? envVars : null });
       } else {
         setHasWorkspace(false);
       }
@@ -52,7 +54,7 @@ function AppContent() {
     const cfg = await invoke<AppConfig>('read_config');
     setConfig(cfg);
     setHasWorkspace(true);
-    await invoke('connect_agent_cmd');
+    await invoke('connect_agent_cmd', { envVars: null });
   };
 
   const handleSaveConfig = async (partial: Partial<AppConfig>) => {
@@ -68,7 +70,8 @@ function AppContent() {
     } as AppConfig;
     await invoke('write_config', { config: merged });
     setConfig(merged);
-    await invoke('restart_agent');
+    const envVars = await getAgentEnvVars(merged.model?.provider ?? 'bedrock');
+    await invoke('restart_agent', { envVars: envVars.length > 0 ? envVars : null });
   };
 
   if (hasWorkspace === null) {
@@ -128,23 +131,31 @@ function AppContent() {
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 overflow-hidden">
-          {activeTab === 'chat' && <ChatView draft={chatDraft} onDraftChange={setChatDraft} />}
-          {activeTab === 'capabilities' && (
+          <div className={activeTab === 'chat' ? 'h-full' : 'hidden'}>
+            <ChatView draft={chatDraft} onDraftChange={setChatDraft} />
+          </div>
+          <div className={activeTab === 'capabilities' ? 'h-full' : 'hidden'}>
             <CapabilityBrowser
               capabilities={capabilities}
               loading={capsLoading}
               onRefresh={refreshCaps}
               workspacePath={workspacePath}
             />
-          )}
-          {activeTab === 'workspace' && <FileExplorer workspacePath={workspacePath} />}
-          {activeTab === 'settings' && config && (
-            <SettingsPanel
-              config={config}
-              systemPrompt={systemPrompt}
-              onSave={handleSaveConfig}
-            />
-          )}
+          </div>
+          <div className={activeTab === 'workspace' ? 'h-full' : 'hidden'}>
+            <FileExplorer workspacePath={workspacePath} />
+          </div>
+          <div className={activeTab === 'settings' ? 'h-full' : 'hidden'}>
+            {config && (
+              <SettingsPanel
+                config={config}
+                systemPrompt={systemPrompt}
+                onSave={handleSaveConfig}
+                hasApiKey={hasApiKey}
+                saveApiKey={saveApiKey}
+              />
+            )}
+          </div>
         </div>
 
         {/* Debug side panel */}

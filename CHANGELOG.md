@@ -4,7 +4,35 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-04-16
+
 ### Added
+- Multi-provider support: Bedrock, Ollama, OpenAI, Anthropic — selectable from Settings panel
+- `Provider` union type (`'bedrock' | 'ollama' | 'openai' | 'anthropic'`) in agent types and UI types
+- Per-provider Zod schemas with `superRefine` cross-validation (active provider block must exist)
+- `createModel()` factory in agent — returns Strands `BedrockModel`, `OpenAIModel`, or `AnthropicModel` based on config
+- Ollama support via `OpenAIModel` with custom `baseURL` (`{host}/v1`) and dummy API key
+- `costs.ts` module with `PROVIDER_COSTS` lookup table and `getActiveModelId()` helper
+- `stronghold.ts` — encrypted API key storage via `@tauri-apps/plugin-stronghold` (Argon2 vault)
+- `saveApiKey()`, `getApiKey()`, `hasApiKey()`, `deleteApiKey()` Stronghold helpers
+- `getAgentEnvVars()` — builds env var tuples from Stronghold keys for agent process injection
+- `tauri-plugin-stronghold` Rust dependency with Argon2 key derivation
+- `validate_non_empty_string()` helper in `lib.rs` for DRY config field validation
+- Provider-specific config validation in `validate_config_payload()` (Rust side)
+- `env_vars` parameter on `connect_agent_cmd` and `restart_agent` Tauri commands — injects API keys at spawn time
+- Provider-specific error detection: `isOllamaConnectionError()`, `isOllamaModelNotFound()`
+- Auth error patterns extended: `Incorrect API key`, `401`, `authentication_error`
+- Per-provider nested config blocks: `BedrockConfig`, `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`
+- Legacy flat config migration (`migrateLegacyConfig()`) — auto-upgrades `{ modelId, region }` to `{ provider: 'bedrock', bedrock: { ... } }`
+- Settings panel: provider dropdown, conditional field groups, API key entry with Stronghold persistence
+- Settings panel: API key validation — requires key for OpenAI/Anthropic before save
+- `@anthropic-ai/sdk` and `@strands-agents/sdk/models/anthropic` imports in agent
+- `openai` SDK dependency in tendril-agent
+- `@tauri-apps/plugin-stronghold` dependency in tendril-ui
+- `scrypt` dev profile opt-level 3 in Cargo.toml (Stronghold key derivation perf)
+- `stronghold:default` permission in Tauri capabilities
+- Tab panels use `hidden` class instead of conditional render — preserves component state across tab switches
+
 - React error boundary at top level — prevents white-screen crashes, shows error + reload button
 - `connection-status` Tauri event for agent lifecycle (connected, disconnected, reconnecting, error)
 - Connection status listener in AgentContext — UI reflects agent state changes in real time
@@ -116,3 +144,17 @@ All notable changes to the Tendril project will be documented in this file.
 - Deno binary auto-downloaded and bundled as Tauri sidecar (pinned v2.7.12)
 - App config at ~/.tendril/config.json — persists workspace path, model, AWS profile, sandbox settings
 - README with agent loop walkthrough, architecture diagram, and quick start guide
+
+### Changed
+- Config schema restructured: flat `model.modelId`/`model.region` replaced with nested `model.bedrock.modelId` etc.
+- `createAgent()` delegates model instantiation to `createModel()` factory
+- Agent startup logging now provider-aware (shows provider, model, region/host as applicable)
+- Token cost tracking uses `PROVIDER_COSTS[provider]` lookup instead of hardcoded constants
+- `connect_agent_cmd` and `restart_agent` accept optional `env_vars` parameter from frontend
+- `connect_agent()` and `restart_agent()` in `acp.rs` accept `env_vars: Option<Vec<(String, String)>>`
+- Agent sidecar `cmd` builder injects env vars from Stronghold (FR-018: env var precedence respected)
+- Settings panel rewritten: provider selector with conditional field groups replaces flat model/region/profile inputs
+- Settings panel retains all provider configs simultaneously (switching providers preserves previous values)
+- `AppConfig.model` type updated to nested provider block structure in both agent and UI types
+- Error messages now provider-generic (e.g. `${provider} authentication failed` instead of hardcoded `Bedrock`)
+- `INPUT_COST_PER_TOKEN` / `OUTPUT_COST_PER_TOKEN` / `MODEL_CONTEXT_LIMIT` constants moved to `costs.ts`

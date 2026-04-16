@@ -49,6 +49,7 @@ fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
 pub async fn connect_agent(
     app: &AppHandle,
     agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+    env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), AcpError> {
     // Hold lock through entire init to prevent race condition
     let mut state = agent_mutex.lock().await;
@@ -87,9 +88,22 @@ pub async fn connect_agent(
         }
     }
 
-    let cmd = shell
+    let mut cmd = shell
         .sidecar("tendril-agent")
         .map_err(|e| AcpError::ShellError(e.to_string()))?;
+
+    // Inject environment variables passed from the frontend (e.g., API keys from Stronghold)
+    if let Some(vars) = &env_vars {
+        for (key, value) in vars {
+            // FR-018: Env var takes precedence — only inject if not already set in parent process
+            if std::env::var(key).is_err() {
+                cmd = cmd.env(key, value);
+                eprintln!("[acp] Injected env var: {key}");
+            } else {
+                eprintln!("[acp] {key} already set in environment — skipping injection");
+            }
+        }
+    }
 
     let (mut rx, child) = cmd
         .spawn()
@@ -266,6 +280,7 @@ pub async fn write_to_agent_logged(
 pub async fn restart_agent(
     app: &AppHandle,
     agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+    env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), AcpError> {
     eprintln!("[acp] Restarting agent sidecar...");
 
@@ -282,7 +297,7 @@ pub async fn restart_agent(
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Reconnect
-    connect_agent(app, agent_mutex).await
+    connect_agent(app, agent_mutex, env_vars).await
 }
 
 pub async fn send_prompt(
