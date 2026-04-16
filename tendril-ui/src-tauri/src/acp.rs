@@ -308,21 +308,28 @@ pub async fn send_prompt(
         let mut state = agent_mutex.lock().await;
         let agent = state.as_mut().ok_or(AcpError::NotConnected)?;
         agent.prompt_counter += 1;
-        (format!("prompt-{}", agent.prompt_counter), agent.app.clone())
+        (
+            format!("prompt-{}", agent.prompt_counter),
+            agent.app.clone(),
+        )
     };
 
-    write_to_agent_logged(&app, agent_mutex, &json!({
-        "jsonrpc": "2.0",
-        "id": prompt_id,
-        "method": "prompt",
-        "params": {
-            "sessionId": "current",
-            "messages": [{
-                "role": "user",
-                "content": [{ "type": "text", "text": text }]
-            }]
-        }
-    }))
+    write_to_agent_logged(
+        &app,
+        agent_mutex,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": prompt_id,
+            "method": "prompt",
+            "params": {
+                "sessionId": "current",
+                "messages": [{
+                    "role": "user",
+                    "content": [{ "type": "text", "text": text }]
+                }]
+            }
+        }),
+    )
     .await
 }
 
@@ -333,10 +340,14 @@ pub async fn send_cancel(agent_mutex: &Arc<Mutex<Option<AgentProcess>>>) -> Resu
         agent.app.clone()
     };
 
-    write_to_agent_logged(&app, agent_mutex, &json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/cancelled",
-        "params": { "requestId": "current" }
-    }))
+    write_to_agent_logged(
+        &app,
+        agent_mutex,
+        &json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/cancelled",
+            "params": { "requestId": "current" }
+        }),
+    )
     .await
 }

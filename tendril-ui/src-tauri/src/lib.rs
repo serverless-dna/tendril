@@ -51,11 +51,10 @@ async fn validate_within_workspace(target: &Path) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn send_prompt(
-    text: String,
-    state: tauri::State<'_, AgentState>,
-) -> Result<(), String> {
-    acp::send_prompt(&text, &state.0).await.map_err(|e| e.to_string())
+async fn send_prompt(text: String, state: tauri::State<'_, AgentState>) -> Result<(), String> {
+    acp::send_prompt(&text, &state.0)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -97,7 +96,9 @@ fn expand_tilde(path: &str) -> String {
 /// Dangerous paths that must never be used as workspace roots.
 fn is_dangerous_path(path: &Path) -> bool {
     let s = path.to_string_lossy();
-    let dangerous = ["/", "/etc", "/usr", "/var", "/System", "/bin", "/sbin", "/lib", "/tmp"];
+    let dangerous = [
+        "/", "/etc", "/usr", "/var", "/System", "/bin", "/sbin", "/lib", "/tmp",
+    ];
     dangerous.iter().any(|d| s == *d)
 }
 
@@ -109,7 +110,9 @@ async fn init_workspace(path: String) -> Result<(), String> {
 
     // Reject dangerous paths and path traversal
     if is_dangerous_path(workspace) {
-        return Err(format!("Refused to initialize workspace at dangerous path: {expanded}"));
+        return Err(format!(
+            "Refused to initialize workspace at dangerous path: {expanded}"
+        ));
     }
     if expanded.contains("..") {
         return Err("Workspace path must not contain '..' traversal".to_string());
@@ -179,9 +182,7 @@ async fn read_config() -> Result<Value, String> {
 fn validate_non_empty_string(parent: &Value, field: &str, label: &str) -> Result<(), String> {
     match parent.get(field) {
         Some(v) => match v.as_str() {
-            Some(s) if s.is_empty() => {
-                Err(format!("Config validation: {label} must not be empty"))
-            }
+            Some("") => Err(format!("Config validation: {label} must not be empty")),
             Some(_) => Ok(()),
             None => Err(format!("Config validation: {label} must be a string")),
         },
@@ -222,8 +223,8 @@ fn validate_config_payload(config: &Value) -> Result<(), String> {
             if let Some(block) = model.get(provider) {
                 match provider {
                     "bedrock" => {
-                        validate_non_empty_string(block, "modelId", &format!("model.bedrock.modelId"))?;
-                        validate_non_empty_string(block, "region", &format!("model.bedrock.region"))?;
+                        validate_non_empty_string(block, "modelId", "model.bedrock.modelId")?;
+                        validate_non_empty_string(block, "region", "model.bedrock.region")?;
                     }
                     "ollama" => {
                         validate_non_empty_string(block, "host", "model.ollama.host")?;
@@ -244,7 +245,10 @@ fn validate_config_payload(config: &Value) -> Result<(), String> {
         if let Some(t) = sandbox.get("timeoutMs") {
             if let Some(n) = t.as_f64() {
                 if n <= 0.0 || n != n.floor() {
-                    return Err("Config validation: sandbox.timeoutMs must be a positive integer".to_string());
+                    return Err(
+                        "Config validation: sandbox.timeoutMs must be a positive integer"
+                            .to_string(),
+                    );
                 }
             } else if !t.is_null() {
                 return Err("Config validation: sandbox.timeoutMs must be a number".to_string());
@@ -255,10 +259,15 @@ fn validate_config_payload(config: &Value) -> Result<(), String> {
         if let Some(m) = registry.get("maxCapabilities") {
             if let Some(n) = m.as_f64() {
                 if n <= 0.0 || n != n.floor() {
-                    return Err("Config validation: registry.maxCapabilities must be a positive integer".to_string());
+                    return Err(
+                        "Config validation: registry.maxCapabilities must be a positive integer"
+                            .to_string(),
+                    );
                 }
             } else if !m.is_null() {
-                return Err("Config validation: registry.maxCapabilities must be a number".to_string());
+                return Err(
+                    "Config validation: registry.maxCapabilities must be a number".to_string(),
+                );
             }
         }
     }
@@ -266,7 +275,9 @@ fn validate_config_payload(config: &Value) -> Result<(), String> {
         if let Some(m) = agent.get("maxTurns") {
             if let Some(n) = m.as_f64() {
                 if n <= 0.0 || n != n.floor() {
-                    return Err("Config validation: agent.maxTurns must be a positive integer".to_string());
+                    return Err(
+                        "Config validation: agent.maxTurns must be a positive integer".to_string(),
+                    );
                 }
             } else if !m.is_null() {
                 return Err("Config validation: agent.maxTurns must be a number".to_string());
@@ -335,9 +346,7 @@ async fn read_file_content(file_path: String) -> Result<String, String> {
     let path = Path::new(&expanded);
     validate_within_workspace(path).await?;
     // Limit to 1MB
-    let metadata = tokio::fs::metadata(path)
-        .await
-        .map_err(|e| e.to_string())?;
+    let metadata = tokio::fs::metadata(path).await.map_err(|e| e.to_string())?;
     if !metadata.is_file() {
         return Err(format!("Not a file: {expanded}"));
     }
@@ -461,15 +470,13 @@ async fn read_tool_source(workspace: String, name: String) -> Result<String, Str
     let tool_path = Path::new(&expanded)
         .join("tools")
         .join(format!("{name}.ts"));
-    tokio::fs::read_to_string(&tool_path)
-        .await
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                format!("Tool source not found: {}", tool_path.display())
-            } else {
-                e.to_string()
-            }
-        })
+    tokio::fs::read_to_string(&tool_path).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            format!("Tool source not found: {}", tool_path.display())
+        } else {
+            e.to_string()
+        }
+    })
 }
 
 #[tauri::command]
@@ -514,15 +521,13 @@ fn default_app_config() -> Value {
 
 async fn read_app_config_inner() -> Result<Value, String> {
     let path = app_config_path();
-    let content = tokio::fs::read_to_string(&path)
-        .await
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                "Config not found".to_string()
-            } else {
-                e.to_string()
-            }
-        })?;
+    let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "Config not found".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
     serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 

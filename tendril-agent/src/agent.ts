@@ -1,4 +1,4 @@
-import { Agent } from '@strands-agents/sdk';
+import { Agent, Model, type BaseModelConfig } from '@strands-agents/sdk';
 import { BedrockModel } from '@strands-agents/sdk/models/bedrock';
 import { OpenAIModel } from '@strands-agents/sdk/models/openai';
 import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
@@ -22,7 +22,7 @@ const nullPrinter: { print: (...args: unknown[]) => void; printNewline: () => vo
  * Create the appropriate Strands model instance based on provider config.
  * Ollama uses OpenAIModel with a custom baseURL (OpenAI-compatible API).
  */
-export function createModel(config: WorkspaceConfig): { model: unknown; provider: Provider } {
+export function createModel(config: WorkspaceConfig): { model: Model<BaseModelConfig>; provider: Provider } {
   const provider = config.model.provider;
 
   switch (provider) {
