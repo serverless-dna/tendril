@@ -17,6 +17,7 @@ All notable changes to the Tendril project will be documented in this file.
 - Deno download uses `$(BINDIR)` as staging area instead of hardcoded `/tmp`
 - `resolve_deno_path()` appends `.exe` suffix on Windows targets
 - Release workflow builds per-platform artifacts in matrix, collects into single GitHub Release
+- Release workflow automatically promotes `[Unreleased]` changelog section to the tagged version before building
 
 ### Fixed
 - Sidecar path baked CI runner absolute path (`/Users/runner/work/...`) into production builds — now resolves relative to executable
