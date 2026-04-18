@@ -129,8 +129,7 @@ fn is_dangerous_path(path: &Path) -> bool {
         if bytes.len() >= 2
             && bytes[0].is_ascii_alphabetic()
             && bytes[1] == b':'
-            && (bytes.len() == 2
-                || (bytes.len() == 3 && (bytes[2] == b'\\' || bytes[2] == b'/')))
+            && (bytes.len() == 2 || (bytes.len() == 3 && (bytes[2] == b'\\' || bytes[2] == b'/')))
         {
             return true;
         }
@@ -601,7 +600,9 @@ pub fn run() {
             .build(),
         )
         .manage(AgentState(Arc::new(Mutex::new(None))))
-        .manage(CrashTrackerState(Arc::new(Mutex::new(acp::CrashTracker::new()))))
+        .manage(CrashTrackerState(Arc::new(Mutex::new(
+            acp::CrashTracker::new(),
+        ))))
         .invoke_handler(tauri::generate_handler![
             send_prompt,
             cancel_prompt,
