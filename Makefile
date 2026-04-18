@@ -1,8 +1,19 @@
-.PHONY: install build test dev clean agent-install agent-build agent-test agent-lint ui-install ui-dev ui-build ui-lint ui-fmt sea sidecars deno-fetch lint fmt check help
+.PHONY: install build test dev clean agent-install agent-build agent-test agent-lint ui-install ui-dev ui-build ui-lint ui-fmt sea sidecars deno-fetch launcher-build lint fmt check help
 
 TRIPLE := $(shell rustc --print host-tuple 2>/dev/null || echo "aarch64-apple-darwin")
 BINDIR := tendril-ui/src-tauri/binaries
 DENO_VERSION := 2.7.12
+
+# ── Platform detection ────────────────────────────────────────
+ifeq ($(OS),Windows_NT)
+  DETECTED_OS := Windows
+  EXE_SUFFIX  := .exe
+  DENO_BINARY := deno.exe
+else
+  DETECTED_OS := $(shell uname -s)
+  EXE_SUFFIX  :=
+  DENO_BINARY := deno
+endif
 
 # Map Rust target triple to Deno download target
 ifeq ($(TRIPLE),aarch64-apple-darwin)
@@ -19,6 +30,9 @@ ifeq ($(TRIPLE),aarch64-unknown-linux-gnu)
 endif
 ifeq ($(TRIPLE),x86_64-pc-windows-msvc)
   DENO_TARGET := x86_64-pc-windows-msvc
+endif
+ifeq ($(TRIPLE),aarch64-pc-windows-msvc)
+  DENO_TARGET := aarch64-pc-windows-msvc
 endif
 DENO_TARGET ?= $(TRIPLE)
 
@@ -38,6 +52,7 @@ help:
 	@echo "  make clean         Remove build artifacts"
 	@echo ""
 	@echo "  Platform: $(TRIPLE)"
+	@echo "  OS:       $(DETECTED_OS)"
 	@echo "  Deno:     $(DENO_VERSION) ($(DENO_TARGET))"
 	@echo ""
 
@@ -67,21 +82,28 @@ sea: agent-build
 $(BINDIR)/deno-$(TRIPLE):
 	@mkdir -p $(BINDIR)
 	@echo "Downloading deno $(DENO_VERSION) for $(DENO_TARGET)..."
-	@curl -fsSL "https://github.com/denoland/deno/releases/download/v$(DENO_VERSION)/deno-$(DENO_TARGET).zip" -o /tmp/deno-$(DENO_TARGET).zip
-	@unzip -o -q /tmp/deno-$(DENO_TARGET).zip -d /tmp/deno-extract
-	@mv /tmp/deno-extract/deno $(BINDIR)/deno-$(TRIPLE)
-	@chmod +x $(BINDIR)/deno-$(TRIPLE)
-	@rm -rf /tmp/deno-$(DENO_TARGET).zip /tmp/deno-extract
+	@curl -fsSL "https://github.com/denoland/deno/releases/download/v$(DENO_VERSION)/deno-$(DENO_TARGET).zip" -o "$(BINDIR)/_deno-download.zip"
+	@unzip -o -q "$(BINDIR)/_deno-download.zip" -d "$(BINDIR)/_deno-extract"
+	@mv "$(BINDIR)/_deno-extract/$(DENO_BINARY)" "$(BINDIR)/deno-$(TRIPLE)"
+ifneq ($(DETECTED_OS),Windows)
+	@chmod +x "$(BINDIR)/deno-$(TRIPLE)"
+endif
+	@rm -rf "$(BINDIR)/_deno-download.zip" "$(BINDIR)/_deno-extract"
 	@echo "Deno $(DENO_VERSION) installed to $(BINDIR)/deno-$(TRIPLE)"
 
 deno-fetch: $(BINDIR)/deno-$(TRIPLE)
 
+# ── Launcher (native sidecar wrapper) ────────────────────────
+
+launcher-build:
+	cd tendril-agent-launcher && cargo build --release
+
 # ── Sidecars ──────────────────────────────────────────────────
 
-sidecars: agent-build deno-fetch
+sidecars: agent-build deno-fetch launcher-build
 	@mkdir -p $(BINDIR)
-	@printf '#!/bin/sh\nnode %s/tendril-agent/dist/main.cjs "$$@"\n' "$(CURDIR)" > $(BINDIR)/tendril-agent-$(TRIPLE)
-	@chmod +x $(BINDIR)/tendril-agent-$(TRIPLE)
+	@cp tendril-agent/dist/main.cjs "$(BINDIR)/tendril-agent-payload-$(TRIPLE)$(EXE_SUFFIX)"
+	@cp "tendril-agent-launcher/target/release/tendril-agent-launcher$(EXE_SUFFIX)" "$(BINDIR)/tendril-agent-$(TRIPLE)$(EXE_SUFFIX)"
 
 # ── UI ────────────────────────────────────────────────────────
 
@@ -124,5 +146,7 @@ release: check ui-build
 clean:
 	rm -rf tendril-agent/dist tendril-agent/node_modules
 	rm -rf tendril-ui/dist tendril-ui/node_modules
-	rm -f $(BINDIR)/tendril-agent-* $(BINDIR)/deno-*
+	rm -f $(BINDIR)/tendril-agent-* $(BINDIR)/deno-* $(BINDIR)/main.cjs
+	rm -rf $(BINDIR)/_deno-*
 	cd tendril-ui/src-tauri && cargo clean 2>/dev/null || true
+	cd tendril-agent-launcher && cargo clean 2>/dev/null || true

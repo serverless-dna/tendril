@@ -26,9 +26,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [],
+    "icon": ["icons/icon.png"],
     "externalBin": [
       "binaries/tendril-agent",
+      "binaries/tendril-agent-payload",
       "binaries/deno"
     ]
   }

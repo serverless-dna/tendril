@@ -1,11 +1,15 @@
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 
 use crate::events::{chrono_now, handle_agent_line, log_host_to_agent};
+
+const MAX_RAPID_CRASHES: usize = 3;
+const CRASH_WINDOW_SECS: u64 = 30;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AcpError {
@@ -25,16 +29,53 @@ pub struct AgentProcess {
     pub app: AppHandle,
 }
 
+/// Tracks rapid agent crashes to detect doom loops.
+pub struct CrashTracker {
+    timestamps: Vec<Instant>,
+}
+
+impl CrashTracker {
+    pub fn new() -> Self {
+        CrashTracker {
+            timestamps: Vec::new(),
+        }
+    }
+
+    /// Record a crash and prune entries outside the window.
+    pub fn record_crash(&mut self) {
+        let now = Instant::now();
+        let window = std::time::Duration::from_secs(CRASH_WINDOW_SECS);
+        self.timestamps.retain(|t| now.duration_since(*t) < window);
+        self.timestamps.push(now);
+    }
+
+    /// True if the agent has crashed too many times within the window.
+    pub fn is_doom_loop(&self) -> bool {
+        self.timestamps.len() >= MAX_RAPID_CRASHES
+    }
+
+    /// Reset after a manual restart so the user gets fresh attempts.
+    pub fn reset(&mut self) {
+        self.timestamps.clear();
+    }
+}
+
 /// Resolve the deno sidecar path: try resource dir (production), then cwd/binaries (dev), then PATH
 fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
+    let exe_suffix = if cfg!(target_os = "windows") {
+        ".exe"
+    } else {
+        ""
+    };
+    let filename = format!("deno-{target_triple}{exe_suffix}");
     let candidates = [
         app.path()
             .resource_dir()
             .ok()
-            .map(|d: std::path::PathBuf| d.join("binaries").join(format!("deno-{target_triple}"))),
+            .map(|d: std::path::PathBuf| d.join("binaries").join(&filename)),
         std::env::current_dir()
             .ok()
-            .map(|d: std::path::PathBuf| d.join("binaries").join(format!("deno-{target_triple}"))),
+            .map(|d: std::path::PathBuf| d.join("binaries").join(&filename)),
     ];
 
     for path in candidates.iter().flatten() {
@@ -49,6 +90,7 @@ fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
 pub async fn connect_agent(
     app: &AppHandle,
     agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+    crash_tracker: &Arc<Mutex<CrashTracker>>,
     env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), AcpError> {
     // Hold lock through entire init to prevent race condition
@@ -66,6 +108,8 @@ pub async fn connect_agent(
     let target_triple = if cfg!(target_arch = "aarch64") {
         if cfg!(target_os = "macos") {
             "aarch64-apple-darwin"
+        } else if cfg!(target_os = "windows") {
+            "aarch64-pc-windows-msvc"
         } else {
             "aarch64-unknown-linux-gnu"
         }
@@ -124,6 +168,7 @@ pub async fn connect_agent(
     // Spawn task to read agent stdout and forward as Tauri events
     let app_clone = app.clone();
     let reconnect_mutex = Arc::clone(agent_mutex);
+    let crash_tracker_clone = Arc::clone(crash_tracker);
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
@@ -156,33 +201,56 @@ pub async fn connect_agent(
                         }),
                     );
 
-                    // Emit connection-status disconnected
-                    let _ = app_clone.emit(
-                        "connection-status",
-                        json!({
-                            "status": "disconnected",
-                            "message": format!("Agent process terminated with code {:?}", payload.code),
-                            "timestamp": chrono_now(),
-                        }),
-                    );
-
                     // Clear agent state
                     {
                         let mut guard = reconnect_mutex.lock().await;
                         *guard = None;
                     }
 
-                    // Emit reconnect-needed — the frontend will trigger
-                    // connect_agent_cmd after a delay, which avoids Send issues
-                    // with nested sidecar spawning in async tasks.
-                    let _ = app_clone.emit(
-                        "connection-status",
-                        json!({
-                            "status": "reconnecting",
-                            "message": "Agent terminated. Attempting reconnect...",
-                            "timestamp": chrono_now(),
-                        }),
-                    );
+                    // Check for doom loop before attempting reconnect
+                    let is_doom_loop = {
+                        let mut tracker = crash_tracker_clone.lock().await;
+                        tracker.record_crash();
+                        tracker.is_doom_loop()
+                    };
+
+                    if is_doom_loop {
+                        eprintln!(
+                            "[acp] Agent crashed {} times in {}s — not retrying. Check debug log for details.",
+                            MAX_RAPID_CRASHES, CRASH_WINDOW_SECS
+                        );
+                        let _ = app_clone.emit(
+                            "connection-status",
+                            json!({
+                                "status": "error",
+                                "message": format!(
+                                    "Agent failed to start after {} attempts. Check the debug log for details.",
+                                    MAX_RAPID_CRASHES
+                                ),
+                                "timestamp": chrono_now(),
+                            }),
+                        );
+                    } else {
+                        let _ = app_clone.emit(
+                            "connection-status",
+                            json!({
+                                "status": "disconnected",
+                                "message": format!("Agent process terminated with code {:?}", payload.code),
+                                "timestamp": chrono_now(),
+                            }),
+                        );
+                        // Emit reconnect-needed — the frontend will trigger
+                        // connect_agent_cmd after a delay, which avoids Send issues
+                        // with nested sidecar spawning in async tasks.
+                        let _ = app_clone.emit(
+                            "connection-status",
+                            json!({
+                                "status": "reconnecting",
+                                "message": "Agent terminated. Attempting reconnect...",
+                                "timestamp": chrono_now(),
+                            }),
+                        );
+                    }
 
                     break;
                 }
@@ -224,7 +292,12 @@ pub async fn connect_agent(
         .unwrap_or_else(|| {
             dirs::home_dir()
                 .map(|h| h.join("tendril-workspace").to_string_lossy().to_string())
-                .unwrap_or_else(|| "/tmp/tendril-workspace".to_string())
+                .unwrap_or_else(|| {
+                    std::env::temp_dir()
+                        .join("tendril-workspace")
+                        .to_string_lossy()
+                        .to_string()
+                })
         });
 
     eprintln!("[acp] Workspace: {workspace}");
@@ -280,6 +353,7 @@ pub async fn write_to_agent_logged(
 pub async fn restart_agent(
     app: &AppHandle,
     agent_mutex: &Arc<Mutex<Option<AgentProcess>>>,
+    crash_tracker: &Arc<Mutex<CrashTracker>>,
     env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), AcpError> {
     eprintln!("[acp] Restarting agent sidecar...");
@@ -293,11 +367,17 @@ pub async fn restart_agent(
         }
     }
 
+    // Manual restart gets fresh attempts
+    {
+        let mut tracker = crash_tracker.lock().await;
+        tracker.reset();
+    }
+
     // Small delay to ensure process is cleaned up
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Reconnect
-    connect_agent(app, agent_mutex, env_vars).await
+    connect_agent(app, agent_mutex, crash_tracker, env_vars).await
 }
 
 pub async fn send_prompt(
