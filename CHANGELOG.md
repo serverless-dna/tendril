@@ -4,6 +4,8 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-04-18
+
 ### Added
 - `tendril-agent-launcher` Rust crate — native sidecar binary replaces `#!/bin/sh` wrapper, works on Windows/Linux/macOS
 - Cross-platform build matrix in CI — quality-gate and release workflows now build on macOS, Linux, and Windows
