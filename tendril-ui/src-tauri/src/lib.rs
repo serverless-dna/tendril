@@ -15,10 +15,13 @@ const DEFAULT_MAX_TURNS: u32 = 100;
 /// Tauri managed state for the agent process.
 pub struct AgentState(pub Arc<Mutex<Option<acp::AgentProcess>>>);
 
+/// Tauri managed state for crash-loop detection.
+pub struct CrashTrackerState(pub Arc<Mutex<acp::CrashTracker>>);
+
 /// App-level config lives at ~/.tendril/config.json
 fn app_config_path() -> PathBuf {
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .unwrap_or_else(std::env::temp_dir)
         .join(".tendril")
         .join("config.json")
 }
@@ -66,9 +69,10 @@ async fn cancel_prompt(state: tauri::State<'_, AgentState>) -> Result<(), String
 async fn connect_agent_cmd(
     app: tauri::AppHandle,
     state: tauri::State<'_, AgentState>,
+    crash_state: tauri::State<'_, CrashTrackerState>,
     env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), String> {
-    acp::connect_agent(&app, &state.0, env_vars)
+    acp::connect_agent(&app, &state.0, &crash_state.0, env_vars)
         .await
         .map_err(|e| e.to_string())
 }
@@ -77,9 +81,10 @@ async fn connect_agent_cmd(
 async fn restart_agent(
     app: tauri::AppHandle,
     state: tauri::State<'_, AgentState>,
+    crash_state: tauri::State<'_, CrashTrackerState>,
     env_vars: Option<Vec<(String, String)>>,
 ) -> Result<(), String> {
-    acp::restart_agent(&app, &state.0, env_vars)
+    acp::restart_agent(&app, &state.0, &crash_state.0, env_vars)
         .await
         .map_err(|e| e.to_string())
 }
@@ -96,10 +101,41 @@ fn expand_tilde(path: &str) -> String {
 /// Dangerous paths that must never be used as workspace roots.
 fn is_dangerous_path(path: &Path) -> bool {
     let s = path.to_string_lossy();
-    let dangerous = [
+
+    // Unix system directories
+    let unix_dangerous = [
         "/", "/etc", "/usr", "/var", "/System", "/bin", "/sbin", "/lib", "/tmp",
     ];
-    dangerous.iter().any(|d| s == *d)
+    if unix_dangerous.iter().any(|d| s == *d) {
+        return true;
+    }
+
+    // Windows system directories (case-insensitive, accept both separators)
+    if cfg!(target_os = "windows") {
+        let lower = s.to_lowercase();
+        let win_dangerous = [
+            "c:\\windows",
+            "c:/windows",
+            "c:\\program files",
+            "c:/program files",
+            "c:\\program files (x86)",
+            "c:/program files (x86)",
+        ];
+        if win_dangerous.iter().any(|d| lower == *d) {
+            return true;
+        }
+        // Block any drive root (e.g. "C:\", "D:", "E:/")
+        let bytes = lower.as_bytes();
+        if bytes.len() >= 2
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes.len() == 2 || (bytes.len() == 3 && (bytes[2] == b'\\' || bytes[2] == b'/')))
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Initialize workspace directory structure + save to app config
@@ -557,13 +593,16 @@ pub fn run() {
             // We use the home dir .tendril folder so the salt persists.
             tauri_plugin_stronghold::Builder::with_argon2(
                 &dirs::home_dir()
-                    .unwrap_or_else(|| PathBuf::from("/tmp"))
+                    .unwrap_or_else(std::env::temp_dir)
                     .join(".tendril")
                     .join("stronghold-salt.txt"),
             )
             .build(),
         )
         .manage(AgentState(Arc::new(Mutex::new(None))))
+        .manage(CrashTrackerState(Arc::new(Mutex::new(
+            acp::CrashTracker::new(),
+        ))))
         .invoke_handler(tauri::generate_handler![
             send_prompt,
             cancel_prompt,

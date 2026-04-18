@@ -12,9 +12,9 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build & Publish Release
-    runs-on: macos-latest
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Validate version format
@@ -25,6 +25,53 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag does not already exist
+        run: |
+          if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag ${{ inputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Update CHANGELOG.md — promote Unreleased to version
+        run: |
+          VERSION="${{ inputs.version }}"
+          SEMVER="${VERSION#v}"
+          DATE="$(date +%Y-%m-%d)"
+          # Replace "## [Unreleased]" with "## [Unreleased]\n\n## [$SEMVER] — $DATE"
+          sed -i "s/^## \[Unreleased\]$/## [Unreleased]\n\n## [${SEMVER}] — ${DATE}/" CHANGELOG.md
+
+      - name: Commit changelog and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "release: ${{ inputs.version }}"
+          git tag "${{ inputs.version }}"
+          git push origin main --tags
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
 
       - uses: actions/setup-node@v4
         with:
@@ -34,11 +81,23 @@ jobs:
             tendril-agent/package-lock.json
             tendril-ui/package-lock.json
 
+      - name: Install Tauri system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make -y
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: tendril-ui/src-tauri
+          workspaces: |
+            tendril-ui/src-tauri
+            tendril-agent-launcher
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli@^2
@@ -47,7 +106,38 @@ jobs:
         run: make install
 
       - name: Build release
+        shell: bash
         run: make release
+
+      - name: Collect installer files
+        shell: bash
+        run: |
+          mkdir -p installers
+          BUNDLE="tendril-ui/src-tauri/target/release/bundle"
+          # macOS
+          cp "$BUNDLE"/dmg/*.dmg installers/ 2>/dev/null || true
+          # Windows
+          cp "$BUNDLE"/msi/*.msi installers/ 2>/dev/null || true
+          # Linux
+          cp "$BUNDLE"/deb/*.deb installers/ 2>/dev/null || true
+          cp "$BUNDLE"/appimage/*.AppImage installers/ 2>/dev/null || true
+          ls -la installers/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: installers/*
+
+  publish:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -55,5 +145,4 @@ jobs:
           tag_name: ${{ inputs.version }}
           name: Tendril ${{ inputs.version }}
           generate_release_notes: true
-          files: |
-            tendril-ui/src-tauri/target/release/bundle/**/*
+          files: artifacts/**/*

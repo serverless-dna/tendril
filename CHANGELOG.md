@@ -4,6 +4,28 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `tendril-agent-launcher` Rust crate — native sidecar binary replaces `#!/bin/sh` wrapper, works on Windows/Linux/macOS
+- Cross-platform build matrix in CI — quality-gate and release workflows now build on macOS, Linux, and Windows
+- `aarch64-pc-windows-msvc` target triple support in Deno mapping and Rust platform detection
+- Windows system directory protection in `is_dangerous_path()` (drive roots, `C:\Windows`, `C:\Program Files`)
+- Platform detection variables in Makefile (`DETECTED_OS`, `EXE_SUFFIX`, `DENO_BINARY`)
+- Agent crash-loop detection — stops retrying after 3 rapid failures within 30s, surfaces error to UI
+
+### Changed
+- Sidecar wrapper replaced: shell script generation swapped for compiled Rust launcher binary via `externalBin`
+- Deno download uses `$(BINDIR)` as staging area instead of hardcoded `/tmp`
+- `resolve_deno_path()` appends `.exe` suffix on Windows targets
+- Release workflow builds per-platform artifacts in matrix, collects into single GitHub Release
+- Release workflow automatically promotes `[Unreleased]` changelog section to the tagged version before building
+- Release artifacts filtered to installer files only (`.dmg`, `.msi`, `.deb`, `.AppImage`) — no longer uploads raw binaries, build scripts, or bundled sidecars
+
+### Fixed
+- Sidecar path baked CI runner absolute path (`/Users/runner/work/...`) into production builds — now resolves relative to executable
+- `/tmp` fallback paths in `app_config_path()`, Stronghold salt, and workspace default replaced with `std::env::temp_dir()`
+- Deno download skips `chmod +x` on Windows where it is a no-op
+- Integration test failing — agent now reads config from workspace dir when passed as CLI arg instead of always hitting `~/.tendril/`
+
 ## [0.1.0] — 2026-04-16
 
 ### Added

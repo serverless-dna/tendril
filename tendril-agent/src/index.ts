@@ -21,7 +21,7 @@ process.stdout.write = function(chunk: string | Uint8Array, ...args: unknown[]):
 async function main() {
   // Workspace can be passed as arg or read from ~/.tendril/config.json
   const workspaceArg = process.argv[2] || undefined;
-  const { config, workspace: workspacePath } = await readConfig(workspaceArg);
+  const { config, workspace: workspacePath } = await readConfig(workspaceArg, workspaceArg);
 
   const provider = config.model.provider;
   const modelId = getActiveModelId(config);

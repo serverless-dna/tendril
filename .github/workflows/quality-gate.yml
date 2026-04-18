@@ -42,3 +42,56 @@ jobs:
 
       - name: Quality gate (fmt + lint + test)
         run: make check
+
+  build-check:
+    name: Build (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: ubuntu-latest
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            tendril-agent/package-lock.json
+            tendril-ui/package-lock.json
+
+      - name: Install Tauri system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - name: Install make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make -y
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            tendril-ui/src-tauri
+            tendril-agent-launcher
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli@^2
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Build sidecars
+        run: make sidecars
+
+      - name: Verify sidecar files
+        shell: bash
+        run: ls -la tendril-ui/src-tauri/binaries/
