@@ -24,6 +24,7 @@ All notable changes to the Tendril project will be documented in this file.
 - Sidecar path baked CI runner absolute path (`/Users/runner/work/...`) into production builds — now resolves relative to executable
 - `/tmp` fallback paths in `app_config_path()`, Stronghold salt, and workspace default replaced with `std::env::temp_dir()`
 - Deno download skips `chmod +x` on Windows where it is a no-op
+- Integration test failing — agent now reads config from workspace dir when passed as CLI arg instead of always hitting `~/.tendril/`
 
 ## [0.1.0] — 2026-04-16
 
