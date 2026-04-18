@@ -4,6 +4,9 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- CI: Add retry logic to `choco install make` on Windows to handle transient Chocolatey CDN outages (504/503)
+
 ## [0.1.2] — 2026-04-18
 
 ### Added

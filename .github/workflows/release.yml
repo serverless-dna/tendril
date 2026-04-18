@@ -89,7 +89,12 @@ jobs:
 
       - name: Install make (Windows)
         if: runner.os == 'Windows'
-        run: choco install make -y
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: choco install make -y
 
       - uses: dtolnay/rust-toolchain@stable
 
