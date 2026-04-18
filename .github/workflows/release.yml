@@ -109,11 +109,25 @@ jobs:
         shell: bash
         run: make release
 
+      - name: Collect installer files
+        shell: bash
+        run: |
+          mkdir -p installers
+          BUNDLE="tendril-ui/src-tauri/target/release/bundle"
+          # macOS
+          cp "$BUNDLE"/dmg/*.dmg installers/ 2>/dev/null || true
+          # Windows
+          cp "$BUNDLE"/msi/*.msi installers/ 2>/dev/null || true
+          # Linux
+          cp "$BUNDLE"/deb/*.deb installers/ 2>/dev/null || true
+          cp "$BUNDLE"/appimage/*.AppImage installers/ 2>/dev/null || true
+          ls -la installers/
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
-          path: tendril-ui/src-tauri/target/release/bundle/**/*
+          path: installers/*
 
   publish:
     name: Create GitHub Release
