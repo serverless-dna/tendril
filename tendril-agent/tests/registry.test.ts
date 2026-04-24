@@ -50,24 +50,39 @@ describe('CapabilityRegistry', () => {
     });
   });
 
-  describe('search', () => {
-    it('finds capabilities by name', async () => {
-      await registry.register(sampleDef, 'code');
-      const results = await registry.search('fetch');
-      expect(results).toHaveLength(1);
-      expect(results[0].name).toBe('fetch_url');
-    });
-
-    it('finds capabilities by trigger text', async () => {
-      await registry.register(sampleDef, 'code');
-      const results = await registry.search('URL page');
-      expect(results).toHaveLength(1);
-    });
-
-    it('returns empty for no match', async () => {
-      await registry.register(sampleDef, 'code');
-      const results = await registry.search('database sql');
+  describe('list', () => {
+    it('returns empty array when no capabilities registered', async () => {
+      const results = await registry.list();
       expect(results).toHaveLength(0);
+    });
+
+    it('returns all capabilities with only selection fields', async () => {
+      await registry.register(sampleDef, 'code');
+      const results = await registry.list();
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        name: 'fetch_url',
+        capability: 'Fetches a URL and returns text content',
+        triggers: ['user provides a URL', 'user asks to fetch a page'],
+        suppression: ['URL already fetched this session'],
+      });
+      // Must NOT include metadata fields
+      expect(results[0]).not.toHaveProperty('tool_path');
+      expect(results[0]).not.toHaveProperty('created');
+      expect(results[0]).not.toHaveProperty('created_by');
+      expect(results[0]).not.toHaveProperty('version');
+    });
+
+    it('returns multiple capabilities', async () => {
+      await registry.register(sampleDef, 'code1');
+      await registry.register({
+        name: 'parse_json',
+        capability: 'Parses JSON text',
+        triggers: ['user asks to parse JSON'],
+        suppression: [],
+      }, 'code2');
+      const results = await registry.list();
+      expect(results).toHaveLength(2);
     });
   });
 

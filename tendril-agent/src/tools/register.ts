@@ -6,7 +6,7 @@ export const registerCapability = (registry: CapabilityRegistry) =>
   tool({
     name: 'registerCapability',
     description:
-      'STEP 2b: When searchCapabilities returns no results, register a NEW tool before executing. Write the definition and TypeScript code. After registering, call execute() with the same code.',
+      'STEP 2b: When listCapabilities shows no matching tool, register a NEW one before executing. Write the definition and TypeScript code. After registering, call execute() with the same code.',
     inputSchema: z.object({
       definition: z.object({
         name: z.string().describe('snake_case tool name'),

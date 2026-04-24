@@ -2,7 +2,7 @@ import { Agent, Model, type BaseModelConfig } from '@strands-agents/sdk';
 import { BedrockModel } from '@strands-agents/sdk/models/bedrock';
 import { OpenAIModel } from '@strands-agents/sdk/models/openai';
 import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
-import { searchCapabilities } from './tools/search.js';
+import { listCapabilities } from './tools/search.js';
 import { registerCapability } from './tools/register.js';
 import { loadTool } from './tools/load.js';
 import { executeCode } from './tools/execute.js';
@@ -98,7 +98,7 @@ export function createAgent(config: WorkspaceConfig, workspacePath: string): Age
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Strands SDK doesn't export a Printer type
     printer: nullPrinter as any,
     tools: [
-      searchCapabilities(registry),
+      listCapabilities(registry),
       registerCapability(registry),
       loadTool(registry),
       executeCode(workspacePath, config),
