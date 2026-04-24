@@ -79,19 +79,19 @@ sea: agent-build
 
 # ── Deno (bundled dependency) ─────────────────────────────────
 
-$(BINDIR)/deno-$(TRIPLE):
+$(BINDIR)/deno-$(TRIPLE)$(EXE_SUFFIX):
 	@mkdir -p $(BINDIR)
 	@echo "Downloading deno $(DENO_VERSION) for $(DENO_TARGET)..."
 	@curl -fsSL "https://github.com/denoland/deno/releases/download/v$(DENO_VERSION)/deno-$(DENO_TARGET).zip" -o "$(BINDIR)/_deno-download.zip"
 	@unzip -o -q "$(BINDIR)/_deno-download.zip" -d "$(BINDIR)/_deno-extract"
-	@mv "$(BINDIR)/_deno-extract/$(DENO_BINARY)" "$(BINDIR)/deno-$(TRIPLE)"
+	@mv "$(BINDIR)/_deno-extract/$(DENO_BINARY)" "$(BINDIR)/deno-$(TRIPLE)$(EXE_SUFFIX)"
 ifneq ($(DETECTED_OS),Windows)
-	@chmod +x "$(BINDIR)/deno-$(TRIPLE)"
+	@chmod +x "$(BINDIR)/deno-$(TRIPLE)$(EXE_SUFFIX)"
 endif
 	@rm -rf "$(BINDIR)/_deno-download.zip" "$(BINDIR)/_deno-extract"
-	@echo "Deno $(DENO_VERSION) installed to $(BINDIR)/deno-$(TRIPLE)"
+	@echo "Deno $(DENO_VERSION) installed to $(BINDIR)/deno-$(TRIPLE)$(EXE_SUFFIX)"
 
-deno-fetch: $(BINDIR)/deno-$(TRIPLE)
+deno-fetch: $(BINDIR)/deno-$(TRIPLE)$(EXE_SUFFIX)
 
 # ── Launcher (native sidecar wrapper) ────────────────────────
 
