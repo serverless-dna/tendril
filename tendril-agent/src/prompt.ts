@@ -8,11 +8,11 @@ Workspace: ${workspacePath}
 Registry: ${workspacePath}/tools/index.json
 
 EVERY REQUEST — follow this exact sequence:
-1. searchCapabilities(query) — always search first
-2. Found? → loadTool(name) then execute(code, args)
-3. Not found? → registerCapability(definition, code) then execute(code, args)
+1. listCapabilities() — always list first. Read the results.
+2. Match found? → loadTool(name) then execute(code, args)
+3. No match? → registerCapability(definition, code) then execute(code, args)
 
-NEVER skip step 1. NEVER skip step 3 — if no tool exists, you MUST register one before executing.
+NEVER skip step 1. NEVER skip step 3 — if no matching tool exists, you MUST register one before executing.
 
 CAPABILITY DEFINITION FORMAT:
 { name: "snake_case_name", capability: "one sentence", triggers: ["signal1", "signal2"], suppression: ["condition1"] }

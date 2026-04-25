@@ -2,19 +2,17 @@ import { tool } from '@strands-agents/sdk';
 import { z } from 'zod';
 import type { CapabilityRegistry } from '../registry.js';
 
-export const searchCapabilities = (registry: CapabilityRegistry) =>
+export const listCapabilities = (registry: CapabilityRegistry) =>
   tool({
-    name: 'searchCapabilities',
+    name: 'listCapabilities',
     description:
-      'STEP 1 of every request. Search the registry for an existing tool. If results are empty, you MUST call registerCapability next — never call execute without a registered tool.',
-    inputSchema: z.object({
-      query: z.string().describe('What capability to search for'),
-    }),
-    callback: async ({ query }) => {
+      'STEP 1 of every request. List all registered tools. Read the results to decide which tool to load, or whether to register a new one.',
+    inputSchema: z.object({}),
+    callback: async () => {
       try {
-        const results = await registry.search(query);
+        const results = await registry.list();
         if (results.length === 0) {
-          return 'No tools found. You MUST call registerCapability to create one.';
+          return 'No tools registered. You MUST call registerCapability to create one.';
         }
         return JSON.stringify(results, null, 2);
       } catch {

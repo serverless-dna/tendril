@@ -4,6 +4,14 @@ import type { CapabilityDefinition, CapabilityIndex } from './types.js';
 
 const VALID_TOOL_NAME = /^[a-z0-9_]+$/;
 
+/** Fields the model needs to decide which tool to use */
+interface CapabilitySummary {
+  name: string;
+  capability: string;
+  triggers: string[];
+  suppression: string[];
+}
+
 export class CapabilityRegistry {
   private indexPath: string;
   private toolsPath: string;
@@ -41,19 +49,15 @@ export class CapabilityRegistry {
     await fs.writeFile(this.indexPath, JSON.stringify(index, null, 2));
   }
 
-  async search(query: string): Promise<CapabilityDefinition[]> {
+  /** Return all capabilities with only the fields needed for tool selection */
+  async list(): Promise<CapabilitySummary[]> {
     const index = await this.loadIndex();
-    const terms = query.toLowerCase().split(/\s+/);
-
-    return index.capabilities
-      .map((cap) => {
-        const searchable = `${cap.name} ${cap.capability} ${cap.triggers.join(' ')}`.toLowerCase();
-        const score = terms.filter((t) => searchable.includes(t)).length;
-        return { cap, score };
-      })
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map(({ cap }) => cap);
+    return index.capabilities.map(({ name, capability, triggers, suppression }) => ({
+      name,
+      capability,
+      triggers,
+      suppression,
+    }));
   }
 
   async register(definition: Omit<CapabilityDefinition, 'tool_path' | 'created' | 'created_by' | 'version'>, code: string): Promise<void> {

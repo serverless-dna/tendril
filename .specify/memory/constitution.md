@@ -122,7 +122,7 @@ Do not add abstractions, configuration options, or extension points
 unless a concrete and immediate need exists.
 
 - YAGNI: no speculative features, no premature generalisation.
-- Four bootstrap tools only: searchCapabilities, registerCapability,
+- Four bootstrap tools only: listCapabilities, registerCapability,
   loadTool, execute. Additional hardcoded tools are a constitution
   violation until explicitly amended.
 - Single workspace, single user. Multi-provider inference is permitted

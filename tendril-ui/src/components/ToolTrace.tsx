@@ -17,8 +17,8 @@ const statusColors = {
 
 function summarizeInput(title: string, input: Record<string, unknown>): string {
   switch (title) {
-    case 'searchCapabilities':
-      return input.query ? `"${input.query}"` : '';
+    case 'listCapabilities':
+      return 'listing tools';
     case 'loadTool':
       return input.name ? String(input.name) : '';
     case 'registerCapability': {
