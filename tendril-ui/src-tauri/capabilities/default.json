@@ -9,8 +9,7 @@
     {
       "identifier": "shell:allow-spawn",
       "allow": [
-        { "name": "binaries/tendril-agent", "sidecar": true },
-        { "name": "binaries/deno", "sidecar": true }
+        { "name": "binaries/tendril-agent", "sidecar": true }
       ]
     },
     {
