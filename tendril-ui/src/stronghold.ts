@@ -8,14 +8,17 @@ import { appDataDir } from '@tauri-apps/api/path';
 const VAULT_PASSWORD = 'tendril-vault-v1'; // App-derived password; vault is local-only
 const CLIENT_NAME = 'tendril-keys';
 
-let strongholdInstance: Stronghold | null = null;
+let strongholdPending: Promise<Stronghold> | null = null;
 
 async function getStronghold(): Promise<Stronghold> {
-  if (strongholdInstance) return strongholdInstance;
-  const dir = await appDataDir();
-  const vaultPath = `${dir}/vault.hold`;
-  strongholdInstance = await Stronghold.load(vaultPath, VAULT_PASSWORD);
-  return strongholdInstance;
+  if (!strongholdPending) {
+    strongholdPending = (async () => {
+      const dir = await appDataDir();
+      const vaultPath = `${dir}/vault.hold`;
+      return Stronghold.load(vaultPath, VAULT_PASSWORD);
+    })();
+  }
+  return strongholdPending;
 }
 
 async function getStore() {

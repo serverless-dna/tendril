@@ -22,7 +22,11 @@ pub fn chrono_now() -> String {
     format!("{}", now.as_millis())
 }
 
-pub fn handle_agent_line(app: &AppHandle, line: &[u8]) {
+pub fn handle_agent_line(
+    app: &AppHandle,
+    line: &[u8],
+    init_tx: &std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+) {
     let line_str = match std::str::from_utf8(line) {
         Ok(s) => s.trim(),
         Err(_) => return,
@@ -45,8 +49,16 @@ pub fn handle_agent_line(app: &AppHandle, line: &[u8]) {
     emit_debug(app, "agent→host", &msg);
 
     // JSON-RPC response (has id, no method) — protocol acknowledgement
-    if msg.get("id").is_some() && msg.get("method").is_none() {
-        eprintln!("[acp] Response: id={}", msg["id"]);
+    if let Some(id) = msg.get("id").filter(|_| msg.get("method").is_none()) {
+        eprintln!("[acp] Response: id={}", id);
+        // Signal init waiter when init-1 response arrives
+        if id.as_str() == Some("init-1") {
+            if let Ok(mut guard) = init_tx.lock() {
+                if let Some(tx) = guard.take() {
+                    let _ = tx.send(());
+                }
+            }
+        }
         return;
     }
 

@@ -61,7 +61,7 @@ impl CrashTracker {
 }
 
 /// Resolve the deno sidecar path: try resource dir (production), then cwd/binaries (dev), then PATH
-fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
+async fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
     let exe_suffix = if cfg!(target_os = "windows") {
         ".exe"
     } else {
@@ -79,7 +79,7 @@ fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
     ];
 
     for path in candidates.iter().flatten() {
-        if path.exists() {
+        if tokio::fs::try_exists(path).await.unwrap_or(false) {
             return path.to_string_lossy().to_string();
         }
     }
@@ -121,7 +121,7 @@ pub async fn connect_agent(
         "x86_64-unknown-linux-gnu"
     };
 
-    let deno_path = resolve_deno_path(app, target_triple);
+    let deno_path = resolve_deno_path(app, target_triple).await;
     eprintln!("[acp] Deno path: {deno_path}");
 
     // Write deno path into config so the agent can read it
@@ -165,6 +165,10 @@ pub async fn connect_agent(
     // Release lock before spawning read task
     drop(state);
 
+    // Create oneshot channel for init-1 response notification
+    let (init_tx, init_rx) = tokio::sync::oneshot::channel::<()>();
+    let init_tx = std::sync::Mutex::new(Some(init_tx));
+
     // Spawn task to read agent stdout and forward as Tauri events
     let app_clone = app.clone();
     let reconnect_mutex = Arc::clone(agent_mutex);
@@ -173,7 +177,7 @@ pub async fn connect_agent(
         while let Some(event) = rx.recv().await {
             match event {
                 CommandEvent::Stdout(line) => {
-                    handle_agent_line(&app_clone, &line);
+                    handle_agent_line(&app_clone, &line, &init_tx);
                 }
                 CommandEvent::Stderr(line) => {
                     if let Ok(s) = std::str::from_utf8(&line) {
@@ -276,9 +280,12 @@ pub async fn connect_agent(
     });
     write_to_agent_logged(app, agent_mutex, &init_msg).await?;
 
-    // Brief delay to allow initialize response
-    // TODO: Replace with actual response wait (tracking init-1 response via events)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // Wait for the agent to respond to initialize (with timeout)
+    match tokio::time::timeout(std::time::Duration::from_secs(10), init_rx).await {
+        Ok(Ok(())) => eprintln!("[acp] Received init-1 response"),
+        Ok(Err(_)) => eprintln!("[acp] Init channel dropped — agent may have crashed"),
+        Err(_) => eprintln!("[acp] Timed out waiting for init-1 response (10s)"),
+    }
 
     // Read workspace path from app config
     let workspace = crate::read_app_config_inner()

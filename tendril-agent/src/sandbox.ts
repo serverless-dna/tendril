@@ -4,6 +4,8 @@ import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 
+const MAX_OUTPUT_BYTES = 1_048_576; // 1MB
+
 export async function executeDeno(
   code: string,
   args: Record<string, unknown>,
@@ -22,6 +24,7 @@ export async function executeDeno(
 
   try {
     return await new Promise<string>((resolve, reject) => {
+      let settled = false;
       const netFlag = allowedDomains.length > 0
         ? `--allow-net=${allowedDomains.join(',')}`
         : '--allow-net';
@@ -38,26 +41,45 @@ export async function executeDeno(
 
       let stdout = '';
       let stderr = '';
+      let outputBytes = 0;
 
-      proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
-      proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+      proc.stdout.on('data', (d: Buffer) => {
+        outputBytes += d.length;
+        if (outputBytes > MAX_OUTPUT_BYTES) {
+          proc.kill('SIGKILL');
+          if (!settled) { settled = true; reject(new Error(`Output exceeded ${MAX_OUTPUT_BYTES} bytes — process killed`)); }
+          return;
+        }
+        stdout += d.toString();
+      });
+
+      proc.stderr.on('data', (d: Buffer) => {
+        outputBytes += d.length;
+        if (outputBytes > MAX_OUTPUT_BYTES) {
+          proc.kill('SIGKILL');
+          if (!settled) { settled = true; reject(new Error(`Output exceeded ${MAX_OUTPUT_BYTES} bytes — process killed`)); }
+          return;
+        }
+        stderr += d.toString();
+      });
 
       const timeout = setTimeout(() => {
         proc.kill('SIGKILL');
-        reject(new Error(`Execution timeout after ${timeoutMs}ms`));
+        if (!settled) { settled = true; reject(new Error(`Execution timeout after ${timeoutMs}ms`)); }
       }, timeoutMs);
 
       proc.on('close', (exitCode) => {
         clearTimeout(timeout);
-        if (exitCode === 0) {
-          resolve(stdout.trim() || '(no output)');
-        } else {
-          reject(new Error(stderr.trim() || `Exit code ${exitCode}`));
-        }
+        if (settled) return;
+        settled = true;
+        if (exitCode === 0) resolve(stdout.trim() || '(no output)');
+        else reject(new Error(stderr.trim() || `Exit code ${exitCode}`));
       });
 
       proc.on('error', (err) => {
         clearTimeout(timeout);
+        if (settled) return;
+        settled = true;
         reject(new Error(`Failed to spawn Deno: ${err.message}`));
       });
     });

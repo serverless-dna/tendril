@@ -1,5 +1,5 @@
 import { readConfig } from './config.js';
-import { createAgent, createModel } from './agent.js';
+import { createAgent } from './agent.js';
 import { writeSystemPrompt } from './prompt.js';
 import { startProtocolLoop, emitUpdate } from './protocol.js';
 import type { ProtocolContext } from './protocol.js';
@@ -240,7 +240,7 @@ async function main() {
   }
 
   function isOllamaModelNotFound(message: string): boolean {
-    return message.includes('404') || message.toLowerCase().includes('model') && message.toLowerCase().includes('not found');
+    return message.includes('404') || (message.toLowerCase().includes('model') && message.toLowerCase().includes('not found'));
   }
 
   startProtocolLoop(ctx);
