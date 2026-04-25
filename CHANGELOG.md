@@ -4,6 +4,8 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-25
+
 ## [0.1.4] — 2026-04-24
 
 ## [0.1.3] — 2026-04-19
