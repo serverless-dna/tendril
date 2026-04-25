@@ -16,6 +16,8 @@ jobs:
     name: Prepare Release
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    outputs:
+      release_sha: ${{ steps.commit.outputs.sha }}
     steps:
       - name: Validate version format
         run: |
@@ -43,14 +45,15 @@ jobs:
           # Replace "## [Unreleased]" with "## [Unreleased]\n\n## [$SEMVER] — $DATE"
           sed -i "s/^## \[Unreleased\]$/## [Unreleased]\n\n## [${SEMVER}] — ${DATE}/" CHANGELOG.md
 
-      - name: Commit changelog and tag
+      - name: Commit changelog
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
           git commit -m "release: ${{ inputs.version }}"
-          git tag "${{ inputs.version }}"
-          git push origin main --tags
+          git push origin main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build (${{ matrix.target }})
@@ -61,7 +64,7 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-          - os: macos-13
+          - os: macos-14
             target: x86_64-apple-darwin
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -71,7 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version }}
+          ref: ${{ needs.prepare.outputs.release_sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -97,6 +100,8 @@ jobs:
           command: choco install make -y
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -112,13 +117,13 @@ jobs:
 
       - name: Build release
         shell: bash
-        run: make release
+        run: make release TRIPLE=${{ matrix.target }}
 
       - name: Collect installer files
         shell: bash
         run: |
           mkdir -p installers
-          BUNDLE="tendril-ui/src-tauri/target/release/bundle"
+          BUNDLE="tendril-ui/src-tauri/target/${{ matrix.target }}/release/bundle"
           # macOS
           cp "$BUNDLE"/dmg/*.dmg installers/ 2>/dev/null || true
           # Windows
@@ -136,9 +141,21 @@ jobs:
 
   publish:
     name: Create GitHub Release
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Create tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ inputs.version }}"
+          git push origin "${{ inputs.version }}"
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
