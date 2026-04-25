@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useReducer, useEffect, useRef, useState, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -161,11 +161,13 @@ export interface DebugEntry {
   isChunkGroup?: boolean;
 }
 
-const AgentContext = createContext<{
+// Separate contexts so debug log updates don't re-render chat consumers
+const AgentStateContext = createContext<{
   state: AgentState;
   dispatch: React.Dispatch<AgentAction>;
-  debugLog: DebugEntry[];
-}>({ state: initialState, dispatch: () => {}, debugLog: [] });
+}>({ state: initialState, dispatch: () => {} });
+
+const DebugLogContext = createContext<DebugEntry[]>([]);
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(agentReducer, initialState);
@@ -365,9 +367,22 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  return <AgentContext.Provider value={{ state, dispatch, debugLog }}>{children}</AgentContext.Provider>;
+  // Memoize agent state context value — only changes when state/dispatch change
+  const agentValue = useMemo(() => ({ state, dispatch }), [state]);
+
+  return (
+    <AgentStateContext.Provider value={agentValue}>
+      <DebugLogContext.Provider value={debugLog}>
+        {children}
+      </DebugLogContext.Provider>
+    </AgentStateContext.Provider>
+  );
 }
 
 export function useAgentState() {
-  return useContext(AgentContext);
+  return useContext(AgentStateContext);
+}
+
+export function useDebugLog() {
+  return useContext(DebugLogContext);
 }

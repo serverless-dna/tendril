@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAgentState } from '../context/AgentContext';
+import { useDebugLog } from '../context/AgentContext';
 
 const directionColors: Record<string, string> = {
   'host→agent': 'text-blue-400',
@@ -28,7 +28,7 @@ function formatTimestamp(raw?: string): string {
 }
 
 export function DebugPanel() {
-  const { debugLog } = useAgentState();
+  const debugLog = useDebugLog();
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 

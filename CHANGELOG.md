@@ -4,15 +4,33 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.1.2] — 2026-04-25
+### Changed
+- Agent sidecar replaced: `tendril-agent-launcher` Rust crate + raw CJS payload replaced with Node.js SEA binary — no runtime `node` dependency
+- Makefile `sea` target builds cross-platform SEA (codesign on macOS, plain postject on Linux/Windows)
+- `sidecars` target depends on `sea` instead of `launcher-build`
+- `tendril-agent-payload` removed from `externalBin` — SEA binary is self-contained
+- Init handshake: replaced `sleep(500ms)` hack with oneshot channel awaiting `init-1` response (10s timeout)
+- `resolve_deno_path()` made async — uses `tokio::fs::try_exists()` instead of blocking `path.exists()`
+- All `std::path::Path::exists()` in async Tauri commands replaced with `tokio::fs::try_exists()`
+- All `std::process::Command` in async Tauri commands replaced with `tokio::process::Command`
+- `AgentContext` split into `AgentStateContext` + `DebugLogContext` — high-frequency debug log updates no longer re-render chat consumers
+- Stronghold singleton uses cached Promise to prevent concurrent `Stronghold.load` race
+- Protocol loop serializes prompt handling — rejects concurrent prompts with JSON-RPC error
+- Sandbox output capped at 1MB (stdout + stderr combined) — kills process on overflow
+- Deno `shell:allow-spawn` permission removed from Tauri capabilities (Deno is spawned by the agent via `child_process`, not the Tauri shell API)
 
-## [0.1.2] — 2026-04-25
+### Fixed
+- Operator precedence bug in `isOllamaModelNotFound` — any message containing "404" incorrectly triggered Ollama-specific error handling
+- Fire-and-forget `invoke()` calls in `useAgent.ts` and `App.tsx` — errors now caught and propagated to UI
+- Sandbox double resolve/reject race — `settled` flag prevents timeout and close events from both firing
+- `handleSaveConfig` optimistic state update — now re-reads config from disk on save failure
 
-## [0.1.5] — 2026-04-25
-
-## [0.2.0] — 2026-04-25
-
-## [0.1.4] — 2026-04-24
+### Removed
+- `tendril-agent-launcher` Rust crate (dead code — replaced by SEA binary)
+- Duplicate `WorkspaceConfig` and sub-interfaces from `types.ts` (already defined by Zod schema in `config.ts`)
+- Unused `MessageUsage`, `QueryResult`, `PromptComplete` type exports from `types.ts`
+- Unused `createModel` import from `index.ts`
+- `build:sea` npm script from `tendril-agent/package.json` (Makefile owns SEA build)
 
 ## [0.1.3] — 2026-04-19
 

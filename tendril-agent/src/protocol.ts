@@ -88,6 +88,7 @@ export async function handleRequest(req: AcpRequest, ctx: ProtocolContext): Prom
 
 export function startProtocolLoop(ctx: ProtocolContext): void {
   const rl = readline.createInterface({ input: process.stdin });
+  let promptInFlight = false;
 
   rl.on('line', async (line: string) => {
     const trimmed = line.trim();
@@ -110,7 +111,23 @@ export function startProtocolLoop(ctx: ProtocolContext): void {
       }
 
       if (parsed.id && parsed.method) {
-        await handleRequest(parsed as unknown as AcpRequest, ctx);
+        const req = parsed as unknown as AcpRequest;
+
+        // Serialize prompt handling — reject concurrent prompts
+        if (req.method === 'prompt') {
+          if (promptInFlight) {
+            emitError(req.id, -32000, 'Prompt already in progress');
+            return;
+          }
+          promptInFlight = true;
+          try {
+            await handleRequest(req, ctx);
+          } finally {
+            promptInFlight = false;
+          }
+        } else {
+          await handleRequest(req, ctx);
+        }
       }
     } catch (err) {
       process.stderr.write(`Protocol error: ${err}\n`);

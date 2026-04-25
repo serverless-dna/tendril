@@ -161,7 +161,7 @@ async fn init_workspace(path: String) -> Result<(), String> {
 
     // Write empty registry inside tools/
     let tools_index = workspace.join("tools").join("index.json");
-    if !tools_index.exists() {
+    if !tokio::fs::try_exists(&tools_index).await.unwrap_or(false) {
         let index_json = serde_json::to_string_pretty(&serde_json::json!({
             "version": "1.0.0",
             "capabilities": []
@@ -401,21 +401,21 @@ async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
         // HTTPS URLs: open in default browser
         #[cfg(target_os = "macos")]
         {
-            std::process::Command::new("open")
+            tokio::process::Command::new("open")
                 .arg(&path)
                 .spawn()
                 .map_err(|e| e.to_string())?;
         }
         #[cfg(target_os = "windows")]
         {
-            std::process::Command::new("explorer")
+            tokio::process::Command::new("explorer")
                 .arg(&path)
                 .spawn()
                 .map_err(|e| e.to_string())?;
         }
         #[cfg(target_os = "linux")]
         {
-            std::process::Command::new("xdg-open")
+            tokio::process::Command::new("xdg-open")
                 .arg(&path)
                 .spawn()
                 .map_err(|e| e.to_string())?;
@@ -439,7 +439,7 @@ async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        tokio::process::Command::new("open")
             .arg("--reveal")
             .arg(&expanded)
             .spawn()
@@ -447,7 +447,7 @@ async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
+        tokio::process::Command::new("explorer")
             .arg(format!("/select,{expanded}"))
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -459,7 +459,7 @@ async fn reveal_in_file_explorer(path: String) -> Result<(), String> {
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| expanded.clone());
-        std::process::Command::new("xdg-open")
+        tokio::process::Command::new("xdg-open")
             .arg(&parent)
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -472,7 +472,7 @@ async fn write_file_content(file_path: String, content: String) -> Result<(), St
     let expanded = expand_tilde(&file_path);
     let path = Path::new(&expanded);
     if let Some(parent) = path.parent() {
-        if !parent.exists() {
+        if !tokio::fs::try_exists(parent).await.unwrap_or(false) {
             return Err(format!(
                 "Parent directory does not exist: {}",
                 parent.display()
@@ -480,7 +480,7 @@ async fn write_file_content(file_path: String, content: String) -> Result<(), St
         }
     }
     // For new files, validate parent is within workspace
-    if path.exists() {
+    if tokio::fs::try_exists(path).await.unwrap_or(false) {
         validate_within_workspace(path).await?;
     } else if let Some(parent) = path.parent() {
         validate_within_workspace(parent).await?;

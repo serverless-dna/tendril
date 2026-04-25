@@ -20,56 +20,6 @@ export interface CapabilityIndex {
 
 export type Provider = 'bedrock' | 'ollama' | 'openai' | 'anthropic';
 
-export interface BedrockConfig {
-  modelId: string;
-  region: string;
-  profile?: string;
-}
-
-export interface OllamaConfig {
-  host: string;
-  modelId: string;
-}
-
-export interface OpenAIConfig {
-  modelId: string;
-}
-
-export interface AnthropicConfig {
-  modelId: string;
-}
-
-// === Workspace Config Types ===
-
-export interface ModelConfig {
-  provider: Provider;
-  bedrock?: BedrockConfig;
-  ollama?: OllamaConfig;
-  openai?: OpenAIConfig;
-  anthropic?: AnthropicConfig;
-}
-
-export interface SandboxConfig {
-  denoPath: string;
-  timeoutMs: number;
-  allowedDomains: string[];
-}
-
-export interface RegistryConfig {
-  maxCapabilities: number;
-}
-
-export interface AgentConfig {
-  maxTurns: number;
-}
-
-export interface WorkspaceConfig {
-  model: ModelConfig;
-  sandbox: SandboxConfig;
-  registry: RegistryConfig;
-  agent: AgentConfig;
-}
-
 // === ACP Protocol Types ===
 
 export interface AcpRequest {
@@ -94,33 +44,4 @@ export type SessionUpdateType =
 export interface SessionUpdate {
   sessionUpdate: SessionUpdateType;
   [key: string]: unknown;
-}
-
-export interface MessageUsage {
-  sessionUpdate: 'message_usage';
-  message_id: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-  duration_ms: number;
-}
-
-export interface QueryResult {
-  sessionUpdate: 'query_result';
-  cost: number;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-  duration_ms: number;
-  context_tokens: number;
-  context_limit: number;
-}
-
-export interface PromptComplete {
-  sessionUpdate: 'prompt_complete';
-  stop_reason: 'end_turn' | 'interrupted' | 'interrupt_safety_timeout' | 'max_tokens';
 }

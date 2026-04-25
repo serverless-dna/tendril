@@ -7,12 +7,20 @@ export function useAgent() {
 
   const sendPrompt = useCallback(async (text: string) => {
     dispatch({ type: 'ADD_USER_MESSAGE', text });
-    await invoke('send_prompt', { text });
+    try {
+      await invoke('send_prompt', { text });
+    } catch (err) {
+      dispatch({ type: 'SET_ERROR', error: err instanceof Error ? err.message : String(err) });
+    }
   }, [dispatch]);
 
   const cancelPrompt = useCallback(async () => {
-    await invoke('cancel_prompt');
-  }, []);
+    try {
+      await invoke('cancel_prompt');
+    } catch (err) {
+      dispatch({ type: 'SET_ERROR', error: err instanceof Error ? err.message : String(err) });
+    }
+  }, [dispatch]);
 
   return { ...state, sendPrompt, cancelPrompt };
 }

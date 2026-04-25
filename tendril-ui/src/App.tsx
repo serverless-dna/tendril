@@ -49,12 +49,16 @@ function AppContent() {
   };
 
   const handleInit = async (path: string) => {
-    await invoke('init_workspace', { path });
-    setWorkspacePath(path);
-    const cfg = await invoke<AppConfig>('read_config');
-    setConfig(cfg);
-    setHasWorkspace(true);
-    await invoke('connect_agent_cmd', { envVars: null });
+    try {
+      await invoke('init_workspace', { path });
+      setWorkspacePath(path);
+      const cfg = await invoke<AppConfig>('read_config');
+      setConfig(cfg);
+      setHasWorkspace(true);
+      await invoke('connect_agent_cmd', { envVars: null });
+    } catch (err) {
+      console.error('[App] handleInit failed:', err);
+    }
   };
 
   const handleSaveConfig = async (partial: Partial<AppConfig>) => {
@@ -68,10 +72,21 @@ function AppContent() {
       registry: { ...(current as AppConfig).registry, ...partial.registry },
       agent: { ...(current as AppConfig).agent, ...partial.agent },
     } as AppConfig;
-    await invoke('write_config', { config: merged });
-    setConfig(merged);
-    const envVars = await getAgentEnvVars(merged.model?.provider ?? 'bedrock');
-    await invoke('restart_agent', { envVars: envVars.length > 0 ? envVars : null });
+    try {
+      await invoke('write_config', { config: merged });
+      setConfig(merged);
+      const envVars = await getAgentEnvVars(merged.model?.provider ?? 'bedrock');
+      await invoke('restart_agent', { envVars: envVars.length > 0 ? envVars : null });
+    } catch (err) {
+      console.error('[App] handleSaveConfig failed:', err);
+      // Re-read config to ensure local state matches disk
+      try {
+        const cfg = await invoke<AppConfig>('read_config');
+        setConfig(cfg);
+      } catch {
+        // Config read failed too — leave current state
+      }
+    }
   };
 
   if (hasWorkspace === null) {

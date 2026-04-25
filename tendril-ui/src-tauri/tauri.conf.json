@@ -36,7 +36,6 @@
     ],
     "externalBin": [
       "binaries/tendril-agent",
-      "binaries/tendril-agent-payload",
       "binaries/deno"
     ]
   }
