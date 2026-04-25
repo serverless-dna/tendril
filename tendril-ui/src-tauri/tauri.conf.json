@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicktomlin/tauri-settings-schema/main/schema.json",
   "productName": "Tendril",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "identifier": "com.serverless-dna.tendril",
   "build": {
     "beforeBuildCommand": "npm run build",
