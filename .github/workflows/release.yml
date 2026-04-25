@@ -53,9 +53,8 @@ jobs:
           # tauri.conf.json — Tauri reads this for artifact filenames
           jq --arg v "$SEMVER" '.version = $v' tendril-ui/src-tauri/tauri.conf.json > tmp.json && mv tmp.json tendril-ui/src-tauri/tauri.conf.json
 
-          # Cargo.toml files
+          # Cargo.toml
           sed -i "0,/^version = .*/s//version = \"${SEMVER}\"/" tendril-ui/src-tauri/Cargo.toml
-          sed -i "0,/^version = .*/s//version = \"${SEMVER}\"/" tendril-agent-launcher/Cargo.toml
 
           # package.json files
           jq --arg v "$SEMVER" '.version = $v' tendril-ui/package.json > tmp.json && mv tmp.json tendril-ui/package.json
@@ -69,7 +68,6 @@ jobs:
           git add CHANGELOG.md \
             tendril-ui/src-tauri/tauri.conf.json \
             tendril-ui/src-tauri/Cargo.toml \
-            tendril-agent-launcher/Cargo.toml \
             tendril-ui/package.json \
             tendril-agent/package.json
           git commit -m "release: ${{ inputs.version }}"
@@ -126,9 +124,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            tendril-ui/src-tauri
-            tendril-agent-launcher
+          workspaces: tendril-ui/src-tauri
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli@^2

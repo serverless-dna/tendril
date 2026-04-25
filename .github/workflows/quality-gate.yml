@@ -84,9 +84,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            tendril-ui/src-tauri
-            tendril-agent-launcher
+          workspaces: tendril-ui/src-tauri
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli@^2

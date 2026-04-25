@@ -1,4 +1,4 @@
-.PHONY: install build test dev clean agent-install agent-build agent-test agent-lint ui-install ui-dev ui-build ui-lint ui-fmt sea sidecars deno-fetch launcher-build lint fmt check help
+.PHONY: install build test dev clean agent-install agent-build agent-test agent-lint ui-install ui-dev ui-build ui-lint ui-fmt sea sidecars deno-fetch lint fmt check help
 
 TRIPLE := $(shell rustc --print host-tuple 2>/dev/null || echo "aarch64-apple-darwin")
 BINDIR := tendril-ui/src-tauri/binaries
@@ -75,7 +75,19 @@ agent-test:
 	cd tendril-agent && npm test
 
 sea: agent-build
-	cd tendril-agent && npm run build:sea
+	@echo "Building Node.js SEA for $(TRIPLE)..."
+	cd tendril-agent && node --experimental-sea-config sea-config.json
+	@cp "$$(command -v node)" tendril-agent/dist/tendril-agent$(EXE_SUFFIX)
+ifeq ($(DETECTED_OS),Darwin)
+	@codesign --remove-signature tendril-agent/dist/tendril-agent$(EXE_SUFFIX)
+	@npx --prefix tendril-agent postject tendril-agent/dist/tendril-agent$(EXE_SUFFIX) NODE_SEA_BLOB tendril-agent/dist/sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 --macho-segment-name NODE_SEA
+	@codesign --sign - tendril-agent/dist/tendril-agent$(EXE_SUFFIX)
+else ifeq ($(DETECTED_OS),Windows)
+	@npx --prefix tendril-agent postject tendril-agent/dist/tendril-agent$(EXE_SUFFIX) NODE_SEA_BLOB tendril-agent/dist/sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+else
+	@npx --prefix tendril-agent postject tendril-agent/dist/tendril-agent$(EXE_SUFFIX) NODE_SEA_BLOB tendril-agent/dist/sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+endif
+	@echo "SEA binary built: tendril-agent/dist/tendril-agent$(EXE_SUFFIX)"
 
 # ── Deno (bundled dependency) ─────────────────────────────────
 
@@ -93,17 +105,13 @@ endif
 
 deno-fetch: $(BINDIR)/deno-$(TRIPLE)$(EXE_SUFFIX)
 
-# ── Launcher (native sidecar wrapper) ────────────────────────
-
-launcher-build:
-	cd tendril-agent-launcher && cargo build --release --target $(TRIPLE)
-
 # ── Sidecars ──────────────────────────────────────────────────
 
-sidecars: agent-build deno-fetch launcher-build
+sidecars: sea deno-fetch
 	@mkdir -p $(BINDIR)
-	@cp tendril-agent/dist/main.cjs "$(BINDIR)/tendril-agent-payload-$(TRIPLE)$(EXE_SUFFIX)"
-	@cp "tendril-agent-launcher/target/$(TRIPLE)/release/tendril-agent-launcher$(EXE_SUFFIX)" "$(BINDIR)/tendril-agent-$(TRIPLE)$(EXE_SUFFIX)"
+	@cp "tendril-agent/dist/tendril-agent$(EXE_SUFFIX)" "$(BINDIR)/tendril-agent-$(TRIPLE)$(EXE_SUFFIX)"
+	@chmod +x "$(BINDIR)/tendril-agent-$(TRIPLE)$(EXE_SUFFIX)" 2>/dev/null || true
+	@echo "Sidecar installed: $(BINDIR)/tendril-agent-$(TRIPLE)$(EXE_SUFFIX)"
 
 # ── UI ────────────────────────────────────────────────────────
 
@@ -149,4 +157,3 @@ clean:
 	rm -f $(BINDIR)/tendril-agent-* $(BINDIR)/deno-* $(BINDIR)/main.cjs
 	rm -rf $(BINDIR)/_deno-*
 	cd tendril-ui/src-tauri && cargo clean 2>/dev/null || true
-	cd tendril-agent-launcher && cargo clean 2>/dev/null || true
