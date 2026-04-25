@@ -4,6 +4,8 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-04-25
+
 ### Changed
 - Agent sidecar replaced: `tendril-agent-launcher` Rust crate + raw CJS payload replaced with Node.js SEA binary — no runtime `node` dependency
 - Makefile `sea` target builds cross-platform SEA (codesign on macOS, plain postject on Linux/Windows)
