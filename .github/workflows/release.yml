@@ -111,8 +111,8 @@ jobs:
 
       - name: Install Tauri CLI
         run: |
-          cargo install cargo-binstall
-          cargo binstall tauri-cli@^2 --no-confirm
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall tauri-cli --version '^2' --no-confirm
 
       - name: Install dependencies
         run: make install
