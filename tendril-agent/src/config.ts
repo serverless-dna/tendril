@@ -174,5 +174,10 @@ export async function readConfig(workspaceOverride?: string, configDirOverride?:
 
   const config = WorkspaceConfigSchema.parse(raw);
 
+  // DENO_PATH env var (set by Tauri shell) takes precedence over config file
+  if (process.env.DENO_PATH) {
+    config.sandbox.denoPath = process.env.DENO_PATH;
+  }
+
   return { config, workspace };
 }

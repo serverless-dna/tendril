@@ -323,6 +323,60 @@ describe('legacy config integration', () => {
   });
 });
 
+// DENO_PATH env var override
+describe('DENO_PATH env var override', () => {
+  const originalEnv = process.env.DENO_PATH;
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.DENO_PATH;
+    } else {
+      process.env.DENO_PATH = originalEnv;
+    }
+  });
+
+  it('overrides denoPath from config file when DENO_PATH is set', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.tendril', 'config.json'),
+      JSON.stringify({
+        model: {
+          provider: 'bedrock',
+          bedrock: { modelId: 'test', region: 'us-east-1' },
+        },
+        sandbox: { denoPath: '/config/deno', timeoutMs: 45000, allowedDomains: [] },
+      }),
+    );
+
+    process.env.DENO_PATH = '/env/deno';
+    const { config } = await readConfig(undefined, tmpDir);
+    expect(config.sandbox.denoPath).toBe('/env/deno');
+  });
+
+  it('overrides default denoPath when no config file exists', async () => {
+    fs.rmSync(path.join(tmpDir, '.tendril'), { recursive: true });
+    process.env.DENO_PATH = '/bundled/deno';
+    const { config } = await readConfig(undefined, tmpDir);
+    expect(config.sandbox.denoPath).toBe('/bundled/deno');
+  });
+
+  it('uses config denoPath when DENO_PATH is not set', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.tendril', 'config.json'),
+      JSON.stringify({
+        model: {
+          provider: 'bedrock',
+          bedrock: { modelId: 'test', region: 'us-east-1' },
+        },
+        sandbox: { denoPath: '/config/deno', timeoutMs: 45000, allowedDomains: [] },
+      }),
+    );
+
+    delete process.env.DENO_PATH;
+    const { config } = await readConfig(undefined, tmpDir);
+    expect(config.sandbox.denoPath).toBe('/config/deno');
+  });
+});
+
 // T004b: New-format bedrock config test
 describe('new-format bedrock config', () => {
   it('reads new-format bedrock config without migration', async () => {
