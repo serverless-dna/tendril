@@ -60,30 +60,56 @@ impl CrashTracker {
     }
 }
 
-/// Resolve the deno sidecar path: try resource dir (production), then cwd/binaries (dev), then PATH
+/// Resolve the deno binary path. Search order:
+///   1. Plain "deno" next to the current executable (e.g. Contents/MacOS/ on macOS)
+///   2. Triple-suffixed "deno-{triple}" next to the current executable
+///   3. resource_dir/binaries/deno-{triple} (Tauri externalBin production path)
+///   4. cwd/binaries/deno-{triple} (dev)
+///   5. cwd/binaries/deno (dev, plain name)
+///   6. Fall back to bare "deno" (relies on PATH)
 async fn resolve_deno_path(app: &AppHandle, target_triple: &str) -> String {
     let exe_suffix = if cfg!(target_os = "windows") {
         ".exe"
     } else {
         ""
     };
-    let filename = format!("deno-{target_triple}{exe_suffix}");
-    let candidates = [
+    let triple_filename = format!("deno-{target_triple}{exe_suffix}");
+    let plain_filename = format!("deno{exe_suffix}");
+
+    // Directory containing the running executable (Contents/MacOS/ on macOS,
+    // the install dir on Windows/Linux).
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+
+    let candidates: Vec<Option<std::path::PathBuf>> = vec![
+        // 1. Plain "deno" next to the running executable (packaged app)
+        exe_dir.as_ref().map(|d| d.join(&plain_filename)),
+        // 2. Triple-suffixed next to the running executable
+        exe_dir.as_ref().map(|d| d.join(&triple_filename)),
+        // 3. resource_dir/binaries with target-triple suffix (Tauri externalBin)
         app.path()
             .resource_dir()
             .ok()
-            .map(|d: std::path::PathBuf| d.join("binaries").join(&filename)),
+            .map(|d: std::path::PathBuf| d.join("binaries").join(&triple_filename)),
+        // 4. cwd/binaries with target-triple suffix (dev)
         std::env::current_dir()
             .ok()
-            .map(|d: std::path::PathBuf| d.join("binaries").join(&filename)),
+            .map(|d: std::path::PathBuf| d.join("binaries").join(&triple_filename)),
+        // 5. cwd/binaries with plain name (dev)
+        std::env::current_dir()
+            .ok()
+            .map(|d: std::path::PathBuf| d.join("binaries").join(&plain_filename)),
     ];
 
     for path in candidates.iter().flatten() {
+        eprintln!("[acp] Checking deno candidate: {}", path.display());
         if tokio::fs::try_exists(path).await.unwrap_or(false) {
             return path.to_string_lossy().to_string();
         }
     }
 
+    eprintln!("[acp] No bundled deno found, falling back to PATH");
     "deno".to_string()
 }
 
