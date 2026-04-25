@@ -35,7 +35,9 @@ jobs:
           workspaces: tendril-ui/src-tauri
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli@^2
+        run: |
+          cargo install cargo-binstall
+          cargo binstall tauri-cli@^2 --no-confirm
 
       - name: Install dependencies
         run: make install
@@ -89,7 +91,9 @@ jobs:
             tendril-agent-launcher
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli@^2
+        run: |
+          cargo install cargo-binstall
+          cargo binstall tauri-cli@^2 --no-confirm
 
       - name: Install dependencies
         run: make install

@@ -96,14 +96,14 @@ deno-fetch: $(BINDIR)/deno-$(TRIPLE)$(EXE_SUFFIX)
 # ── Launcher (native sidecar wrapper) ────────────────────────
 
 launcher-build:
-	cd tendril-agent-launcher && cargo build --release
+	cd tendril-agent-launcher && cargo build --release --target $(TRIPLE)
 
 # ── Sidecars ──────────────────────────────────────────────────
 
 sidecars: agent-build deno-fetch launcher-build
 	@mkdir -p $(BINDIR)
 	@cp tendril-agent/dist/main.cjs "$(BINDIR)/tendril-agent-payload-$(TRIPLE)$(EXE_SUFFIX)"
-	@cp "tendril-agent-launcher/target/release/tendril-agent-launcher$(EXE_SUFFIX)" "$(BINDIR)/tendril-agent-$(TRIPLE)$(EXE_SUFFIX)"
+	@cp "tendril-agent-launcher/target/$(TRIPLE)/release/tendril-agent-launcher$(EXE_SUFFIX)" "$(BINDIR)/tendril-agent-$(TRIPLE)$(EXE_SUFFIX)"
 
 # ── UI ────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ ui-dev: sidecars ui-install
 	cd tendril-ui && cargo tauri dev
 
 ui-build: sidecars ui-install
-	cd tendril-ui && cargo tauri build
+	cd tendril-ui && cargo tauri build --target $(TRIPLE)
 
 # ── Quality gates ─────────────────────────────────────────────
 
@@ -122,7 +122,7 @@ ui-fmt:
 	cd tendril-ui/src-tauri && cargo fmt -- --check
 
 ui-lint: sidecars
-	cd tendril-ui/src-tauri && cargo clippy -- -D warnings
+	cd tendril-ui/src-tauri && cargo clippy --target $(TRIPLE) -- -D warnings
 
 fmt: ui-fmt
 	@echo "Format check passed"
