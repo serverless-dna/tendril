@@ -1,6 +1,6 @@
 {
   "name": "tendril-agent",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Tendril agentic sandbox — ACP sidecar powered by Strands SDK",
   "type": "module",
   "main": "dist/main.cjs",
