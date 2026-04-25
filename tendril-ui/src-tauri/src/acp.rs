@@ -130,7 +130,7 @@ pub async fn connect_agent(
 
     let shell = app.shell();
 
-    // Resolve the deno sidecar path and write to config so the agent reads it
+    // Resolve the deno sidecar path — passed to agent via DENO_PATH env var
     let target_triple = if cfg!(target_arch = "aarch64") {
         if cfg!(target_os = "macos") {
             "aarch64-apple-darwin"
@@ -150,17 +150,12 @@ pub async fn connect_agent(
     let deno_path = resolve_deno_path(app, target_triple).await;
     eprintln!("[acp] Deno path: {deno_path}");
 
-    // Write deno path into config so the agent can read it
-    if let Ok(mut cfg) = crate::read_app_config_inner().await {
-        if let Some(sandbox) = cfg.get_mut("sandbox").and_then(|s| s.as_object_mut()) {
-            sandbox.insert("denoPath".to_string(), serde_json::json!(deno_path));
-            let _ = crate::write_app_config_inner(&cfg).await;
-        }
-    }
-
     let mut cmd = shell
         .sidecar("tendril-agent")
         .map_err(|e| AcpError::ShellError(e.to_string()))?;
+
+    // Pass resolved deno path as env var so the agent doesn't need a config file
+    cmd = cmd.env("DENO_PATH", &deno_path);
 
     // Inject environment variables passed from the frontend (e.g., API keys from Stronghold)
     if let Some(vars) = &env_vars {
