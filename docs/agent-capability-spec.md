@@ -222,9 +222,9 @@ Metadata fields (`tool_path`, `created`, `created_by`, `version`) are omitted to
 
 ## 5. Operational Protocol
 
-### 5.1 The List-First Rule
+### 5.1 The Capability-First Rule
 
-Every user request MUST follow this sequence:
+Every action MUST follow this sequence — including sub-tasks within a single turn. The scope is not "every user message" but "every action that requires a tool".
 
 ```
 1. listCapabilities() — read the full registry
@@ -237,7 +237,7 @@ Every user request MUST follow this sequence:
      c. execute(code, args)
 ```
 
-The model MUST NOT skip step 1. The model MUST NOT answer from memory when a tool could provide live data.
+The model MUST NOT skip step 1. The model MUST NOT answer from memory when a tool could provide live data. The `execute` tool MUST only run code loaded from a registered capability — never inline code composed on the fly. If the model finds itself writing code directly in the `execute` call, it MUST stop and register the capability first.
 
 ### 5.2 Capability Authoring Guidelines
 
@@ -326,12 +326,13 @@ Implementations MAY enforce a maximum number of capabilities. The default limit 
 
 An AC-compliant system MUST instruct the model with the following behavioural directives (paraphrased — exact wording is implementation-specific):
 
-1. **List first**: Before acting on any request, call `listCapabilities()` and read the results.
+1. **List first**: Before every action (including sub-tasks within a turn), call `listCapabilities()` and read the results.
 2. **Load and execute**: If a matching capability is found, load its code and execute it.
 3. **Author and register**: If no capability is found, write the implementation, register it, then execute it.
-4. **Capability definition conventions**: Describe *what* not *when*; use observable triggers; include suppression conditions.
-5. **Implementation conventions**: TypeScript, single-purpose, `console.log()` output, external imports via CDN URL.
-6. **Act immediately**: Do not narrate intent. Do not explain what you are about to do. Execute.
+4. **No inline code**: The `execute` tool runs registered code only. Never compose code directly in the execute call.
+5. **Capability definition conventions**: Describe *what* not *when*; use observable triggers; include suppression conditions.
+6. **Implementation conventions**: TypeScript, single-purpose, `console.log()` output, external imports via CDN URL.
+7. **Act immediately**: Do not narrate intent. Do not explain what you are about to do. Execute.
 
 ---
 

@@ -5,6 +5,13 @@ All notable changes to the Tendril project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- System prompt: "EVERY REQUEST" → "EVERY ACTION" — loop now applies to sub-tasks within a turn, not just top-level user messages
+- System prompt: added hard rule — `execute()` runs registered code only, no inline code, no exceptions
+- System prompt: added rule — every workspace read/write goes through a registered capability
+- `execute` tool description tightened — code argument MUST come from `loadTool()` or `registerCapability()`
+- Agent Capability spec §5.1 renamed "List-First Rule" → "Capability-First Rule", scoped to every action not every request
+- Agent Capability spec §5.1 added: `execute` MUST only run registered code
+- Agent Capability spec §8 added directive 4: "No inline code"
 - **Agent restructured into `loop/` and `transport/` layers** — agentic loop (tools, prompt, registry, sandbox) separated from transport (ACP protocol, stream observer, error classification)
 - 4 tool files (`tools/search.ts`, `tools/register.ts`, `tools/load.ts`, `tools/execute.ts`) consolidated into `loop/tools.ts`, ordered by agentic cycle step: SEARCH → LOAD → CREATE → EXECUTE
 - Stream event handling extracted from `index.ts` into `transport/stream.ts` — classifies SDK events into loop phases (think, act, observe, metadata) instead of stringly-typed `if (type === '...')` chains
