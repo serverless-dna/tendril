@@ -14,22 +14,21 @@ You: "fetch the top stories from Hacker News"
 Tendril:
   → searchCapabilities("fetch url hacker news")    # nothing found
   → registerCapability(fetch_url, code)             # builds a tool
-  → execute(fetch_url, {url: "https://..."})        # runs it
+  → execute("fetch_url", {url: "https://..."})      # runs it by name
   → "Here are the top stories: ..."
 
 You: "now fetch Lobsters and compare"
 
 Tendril:
-  → searchCapabilities("fetch url")                 # found: fetch_url ✓
-  → loadTool("fetch_url")                           # reuses it
-  → execute(fetch_url, {url: "https://lobste.rs"})  # no rebuild needed
+  → listCapabilities()                              # found: fetch_url ✓
+  → execute("fetch_url", {url: "https://lobste.rs"})# runs it — no rebuild
 ```
 
 The registry grows with use. Every session is smarter than the last.
 
 ## The Agent Loop
 
-The core of Tendril is a Strands agent with **four bootstrap tools**. That's it — four tools to rule them all.
+The core of Tendril is a Strands agent with **three bootstrap tools**. That's it — three tools to rule them all.
 
 ### Where it lives
 
@@ -50,7 +49,7 @@ tendril-agent/src/
 
 ### How it works
 
-**`agent.ts`** — Creates the Strands agent with a Bedrock model and four tools:
+**`agent.ts`** — Creates the Strands agent with a Bedrock model and three tools:
 
 ```typescript
 import { Agent } from '@strands-agents/sdk';
@@ -61,10 +60,9 @@ const agent = new Agent({
   systemPrompt: TENDRIL_SYSTEM_PROMPT(workspacePath),
   printer: nullPrinter,   // suppress SDK stdout — we own the protocol
   tools: [
-    searchCapabilities(workspacePath),
-    registerCapability(workspacePath),
-    loadTool(workspacePath),
-    executeCode(workspacePath),
+    listCapabilities(registry),
+    registerCapability(registry),
+    executeCode(registry, workspacePath, config),
   ],
 });
 ```
@@ -100,7 +98,7 @@ RULES:
 
 ### The "too many tools" solution
 
-Most agent frameworks give the model a big bag of tools and hope it picks the right one. Tendril inverts this — the model always sees exactly **four tools**. It searches a registry, builds what it needs, and the registry grows over time. The tool surface never changes; the capabilities do.
+Most agent frameworks give the model a big bag of tools and hope it picks the right one. Tendril inverts this — the model always sees exactly **three tools**. It searches a registry, builds what it needs, and the registry grows over time. The tool surface never changes; the capabilities do.
 
 ## Architecture
 

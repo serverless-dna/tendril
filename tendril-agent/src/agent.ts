@@ -2,7 +2,7 @@ import { Agent, Model, type BaseModelConfig } from '@strands-agents/sdk';
 import { BedrockModel } from '@strands-agents/sdk/models/bedrock';
 import { OpenAIModel } from '@strands-agents/sdk/models/openai';
 import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
-import { listCapabilities, registerCapability, loadTool, executeCode } from './loop/tools.js';
+import { listCapabilities, registerCapability, executeCode } from './loop/tools.js';
 import { TENDRIL_SYSTEM_PROMPT } from './loop/prompt.js';
 import { CapabilityRegistry } from './loop/registry.js';
 import type { WorkspaceConfig } from './config.js';
@@ -97,8 +97,7 @@ export function createAgent(config: WorkspaceConfig, workspacePath: string): Age
     tools: [
       listCapabilities(registry),
       registerCapability(registry),
-      loadTool(registry),
-      executeCode(workspacePath, config),
+      executeCode(registry, workspacePath, config),
     ],
   });
 }

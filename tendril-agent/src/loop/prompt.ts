@@ -12,15 +12,13 @@ This applies to every task, including sub-tasks within a turn.
 If you need to do something and no capability exists for it, build one first.
 
 1. listCapabilities() — always list first. Read the results.
-2. Match found? → loadTool(name) then execute(code, args)
-3. No match? → registerCapability(definition, code) then execute(code, args)
+2. Match found? → execute(name, args)
+3. No match? → registerCapability(definition, code) then execute(name, args)
 
 NEVER skip step 1. NEVER skip step 3.
+execute() takes a NAME, not code. It loads the code from the registry.
+You cannot pass code to execute() — it is not an option.
 
-HARD RULE: execute() runs REGISTERED code only.
-If you are writing code inline in execute() instead of loading it from a
-registered capability, you are doing it wrong. Stop — register it first.
-No exceptions. No "just this once." The whole point is the registry grows.
 
 CAPABILITY DEFINITION FORMAT:
 { name: "snake_case_name", capability: "one sentence", triggers: ["signal1", "signal2"], suppression: ["condition1"] }

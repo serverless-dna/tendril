@@ -46,16 +46,15 @@ The registry supports three operations: **search**, **register** (upsert), and *
 
 ### 2.3 Bootstrap Tools
 
-**Bootstrap tools** are the only hardcoded tools in the system. They provide the model with the minimum operations needed to manage and use the registry. There are exactly four:
+**Bootstrap tools** are the only hardcoded tools in the system. They provide the model with the minimum operations needed to manage and use the registry. There are exactly three:
 
 | Tool | Purpose |
 |------|---------|
 | `listCapabilities` | List all registered capabilities for the model to read |
 | `registerCapability` | Store a new capability definition and implementation |
-| `loadTool` | Retrieve the source code of a registered capability |
-| `execute` | Run code in the sandbox |
+| `execute` | Load a registered capability by name and run it in the sandbox |
 
-No additional hardcoded tools are permitted. If the system needs a new tool, the model builds it.
+No additional hardcoded tools are permitted. If the system needs a new tool, the model builds it. Note: `execute` takes a capability **name**, not code. It loads the implementation from the registry internally. The model cannot pass arbitrary code to `execute` — this is enforced at the API level.
 
 ### 2.4 Sandbox
 
@@ -180,41 +179,30 @@ Metadata fields (`tool_path`, `created`, `created_by`, `version`) are omitted to
 
 **Output**: Confirmation message.
 
-### 4.3 loadTool
+### 4.3 execute
 
-**Purpose**: Retrieve the source code of a registered capability.
-
-**Input**:
-
-```typescript
-{ name: string }
-```
-
-**Output**: The contents of `tools/{name}.ts` as a string.
-
-**Error**: If the tool file does not exist, return an error message.
-
-### 4.4 execute
-
-**Purpose**: Run arbitrary TypeScript code in the sandbox.
+**Purpose**: Load a registered capability by name and run it in the sandbox.
 
 **Input**:
 
 ```typescript
 {
-  code: string;                        // TypeScript source code
+  name: string;                        // snake_case capability name from the registry
   args?: Record<string, unknown>;      // arguments injected as `args` global
 }
 ```
 
+**Design constraint**: The model provides a capability **name**, not code. The `execute` tool loads the implementation from the registry internally (`tools/{name}.ts`). This is enforced at the API level — there is no code parameter. If the capability does not exist, `execute` returns an error directing the model to register it first.
+
 **Behaviour**:
 
-1. Prepend a prelude injecting `args` and `__workspace` as globals.
-2. Write the complete script to a temporary file.
-3. Spawn the sandbox subprocess with scoped permissions.
-4. Capture stdout as the tool result, stderr as diagnostics.
-5. Enforce timeout — kill the process if exceeded.
-6. Clean up the temporary file.
+1. Load the implementation from `tools/{name}.ts`. If not found, return an error.
+2. Prepend a prelude injecting `args` and `__workspace` as globals.
+3. Write the complete script to a temporary file.
+4. Spawn the sandbox subprocess with scoped permissions.
+5. Capture stdout as the tool result, stderr as diagnostics.
+6. Enforce timeout — kill the process if exceeded.
+7. Clean up the temporary file.
 
 **Output**: The captured stdout of the execution.
 
@@ -229,12 +217,11 @@ Every action MUST follow this sequence — including sub-tasks within a single t
 ```
 1. listCapabilities() — read the full registry
 2. IF a matching capability exists:
-     a. loadTool(name)
-     b. execute(loaded code, args)
+     a. execute(name, args)
 3. IF no match:
      a. Write TypeScript implementation
      b. registerCapability(definition, code)
-     c. execute(code, args)
+     c. execute(name, args)
 ```
 
 The model MUST NOT skip step 1. The model MUST NOT answer from memory when a tool could provide live data. The `execute` tool MUST only run code loaded from a registered capability — never inline code composed on the fly. If the model finds itself writing code directly in the `execute` call, it MUST stop and register the capability first.
@@ -262,7 +249,7 @@ When the model creates a new capability, the following conventions apply:
           ┌──────────────────────────────┐
           │          REGISTERED          │◄──── registerCapability() (upsert)
           └──────────┬───────────────────┘
-                     │ listCapabilities() → loadTool() → execute()
+                     │ listCapabilities() → execute(name)
                      ▼
           ┌──────────────────────────────┐
           │           IN USE             │
@@ -340,7 +327,7 @@ An AC-compliant system MUST instruct the model with the following behavioural di
 
 An implementation is **AC-conformant** if it satisfies all of the following:
 
-1. Exposes exactly four bootstrap tools as defined in §4.
+1. Exposes exactly three bootstrap tools as defined in §4.
 2. Persists capabilities using the data model defined in §3.
 3. Follows the list-first operational protocol defined in §5.1.
 4. Enforces sandbox boundaries as defined in §6.
@@ -389,7 +376,7 @@ console.log(clean.substring(0, 3000));
 
 ## Appendix B: Bootstrap Tool Schemas
 
-For model providers that require formal tool definitions (e.g., Bedrock, OpenAI function calling), the four bootstrap tools have the following input schemas:
+For model providers that require formal tool definitions (e.g., Bedrock, OpenAI function calling), the three bootstrap tools have the following input schemas:
 
 ```json
 {
@@ -423,20 +410,13 @@ For model providers that require formal tool definitions (e.g., Bedrock, OpenAI 
     },
     "required": ["definition", "code"]
   },
-  "loadTool": {
-    "type": "object",
-    "properties": {
-      "name": { "type": "string", "description": "Capability name to load" }
-    },
-    "required": ["name"]
-  },
   "execute": {
     "type": "object",
     "properties": {
-      "code": { "type": "string", "description": "TypeScript code to execute in sandbox" },
+      "name": { "type": "string", "description": "Registered capability name to load and execute" },
       "args": { "type": "object", "description": "Arguments injected as the `args` global" }
     },
-    "required": ["code"]
+    "required": ["name"]
   }
 }
 ```

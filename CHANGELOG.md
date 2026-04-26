@@ -5,13 +5,14 @@ All notable changes to the Tendril project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **`execute()` now takes a capability name, not code** — loads implementation from registry internally. The model cannot pass arbitrary code. Inline code bypass is impossible at the API level.
+- `loadTool` bootstrap tool removed — `execute()` loads code from registry itself, reducing bootstrap tools from 4 to 3
+- `registerCapability` confirmation message now directs model to call `execute(name)` next
 - System prompt: "EVERY REQUEST" → "EVERY ACTION" — loop now applies to sub-tasks within a turn, not just top-level user messages
-- System prompt: added hard rule — `execute()` runs registered code only, no inline code, no exceptions
-- System prompt: added rule — every workspace read/write goes through a registered capability
-- `execute` tool description tightened — code argument MUST come from `loadTool()` or `registerCapability()`
-- Agent Capability spec §5.1 renamed "List-First Rule" → "Capability-First Rule", scoped to every action not every request
-- Agent Capability spec §5.1 added: `execute` MUST only run registered code
-- Agent Capability spec §8 added directive 4: "No inline code"
+- System prompt: updated sequence to reflect name-based execute (step 2 is now just `execute(name, args)`)
+- Agent Capability spec updated throughout: 4 bootstrap tools → 3, `loadTool` removed, `execute` takes name not code
+- Agent Capability spec §5.1 renamed "List-First Rule" → "Capability-First Rule"
+- Agent Capability spec §8 added directive 4: "No inline code" (enforced at API level)
 - **Agent restructured into `loop/` and `transport/` layers** — agentic loop (tools, prompt, registry, sandbox) separated from transport (ACP protocol, stream observer, error classification)
 - 4 tool files (`tools/search.ts`, `tools/register.ts`, `tools/load.ts`, `tools/execute.ts`) consolidated into `loop/tools.ts`, ordered by agentic cycle step: SEARCH → LOAD → CREATE → EXECUTE
 - Stream event handling extracted from `index.ts` into `transport/stream.ts` — classifies SDK events into loop phases (think, act, observe, metadata) instead of stringly-typed `if (type === '...')` chains
