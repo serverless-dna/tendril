@@ -19,14 +19,12 @@ function summarizeInput(title: string, input: Record<string, unknown>): string {
   switch (title) {
     case 'listCapabilities':
       return 'listing tools';
-    case 'loadTool':
-      return input.name ? String(input.name) : '';
     case 'registerCapability': {
       const def = input.definition as Record<string, unknown> | undefined;
       return def?.name ? String(def.name) : '';
     }
     case 'execute':
-      return input.code ? `${String(input.code).trim().slice(0, 50)}…` : '';
+      return input.name ? String(input.name) : '';
     default: {
       const first = Object.values(input).find((v) => typeof v === 'string' && v.length > 0);
       return first ? String(first).slice(0, 50) : '';
