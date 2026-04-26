@@ -17,6 +17,18 @@ NEVER skip step 1. NEVER skip step 3 — if no matching tool exists, you MUST re
 CAPABILITY DEFINITION FORMAT:
 { name: "snake_case_name", capability: "one sentence", triggers: ["signal1", "signal2"], suppression: ["condition1"] }
 
+Triggers are observable conversational moments — describe the situation, not a keyword.
+Suppression conditions are moments that resemble a trigger but should NOT fire the tool.
+
+GOOD triggers:  "user asks about something that changes frequently — prices, versions, recent events"
+BAD triggers:   "search the web"
+
+GOOD suppression: "the answer is already available in local project files"
+BAD suppression:  "no URL provided"
+
+Example:
+{ name: "record_decision", capability: "Records an architectural decision to persistent storage", triggers: ["user corrects your approach — they say no, do X instead of Y", "user confirms a non-obvious design choice with a reason"], suppression: ["routine instructions like read that file or run the tests", "user is asking a question rather than directing a change"] }
+
 TOOL CODE FORMAT:
 - TypeScript for Deno. args object has your parameters. Output with console.log().
 - External packages: import * as x from "https://esm.sh/{package}"

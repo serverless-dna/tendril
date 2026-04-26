@@ -1,6 +1,6 @@
 # Tendril
 
-A self-extending agentic sandbox that demonstrates the **Agency Tooling** pattern — where the model discovers, builds, and reuses tools autonomously across sessions.
+A self-extending agentic sandbox that demonstrates the **Agent Capability** pattern — where the model discovers, builds, and reuses tools autonomously across sessions.
 
 Built with [AWS Strands Agents SDK](https://github.com/strands-agents/sdk-typescript) and [Tauri](https://tauri.app).
 
@@ -35,16 +35,17 @@ The core of Tendril is a Strands agent with **four bootstrap tools**. That's it 
 
 ```
 tendril-agent/src/
-├── agent.ts          ← Agent configuration (Strands + Bedrock)
-├── index.ts          ← ACP protocol bridge + stream event translation
-├── prompt.ts         ← System prompt (autonomous behaviour rules)
-├── tools/
-│   ├── search.ts     ← searchCapabilities — find existing tools
-│   ├── register.ts   ← registerCapability — store new tools
-│   ├── load.ts       ← loadTool — read tool source code
-│   └── execute.ts    ← execute — run TypeScript in Deno sandbox
-├── registry.ts       ← Capability registry (index.json CRUD + search)
-└── sandbox.ts        ← Deno subprocess execution with sandboxing
+├── agent.ts              ← Agent configuration (Strands model + tools)
+├── index.ts              ← Orchestrator — wires loop to transport
+├── loop/                 ← The agentic loop
+│   ├── tools.ts          ← 4 bootstrap tools in cycle order
+│   ├── prompt.ts         ← System prompt (autonomous behaviour rules)
+│   ├── registry.ts       ← Capability registry (index.json CRUD)
+│   └── sandbox.ts        ← Deno subprocess execution with sandboxing
+└── transport/            ← Conversation framing + stream observation
+    ├── protocol.ts       ← ACP JSON-RPC over stdio
+    ├── stream.ts         ← SDK events → loop phases (think/act/observe)
+    └── errors.ts         ← Provider error classification
 ```
 
 ### How it works
@@ -68,27 +69,22 @@ const agent = new Agent({
 });
 ```
 
-**`index.ts`** — Bridges the Strands agent to the ACP protocol over NDJSON/stdio:
+**`index.ts`** — Observes the agentic loop and bridges it to the ACP protocol:
 
 ```typescript
-// Stream events from Strands → translate to ACP notifications → write to stdout
-const stream = agent.stream(userText);
-
-for await (const event of stream) {
-  if (event.type === 'modelStreamUpdateEvent') {
-    // Text delta at event.event.delta.text
-    emitUpdate({ sessionUpdate: 'agent_message_chunk', text: delta });
+// The agentic loop runs inside agent.stream().
+// We observe each phase and forward to the UI.
+for await (const event of agent.stream(userText)) {
+  const { phase, event: e } = classifyEvent(event);
+  switch (phase) {
+    case 'think':   emitUpdate(handleThink(e));    break;  // text delta
+    case 'act':     emitUpdate(handleAct(e));      break;  // tool call
+    case 'observe': emitUpdate(handleObserve(e));  break;  // tool result
   }
-  if (event.type === 'beforeToolCallEvent') {
-    emitUpdate({ sessionUpdate: 'tool_call', title: toolName, ... });
-  }
-  // ...
 }
-
-emitUpdate({ sessionUpdate: 'prompt_complete', stop_reason: 'end_turn' });
 ```
 
-**`prompt.ts`** — The system prompt that makes the agent autonomous:
+**`loop/prompt.ts`** — The system prompt that makes the agent autonomous:
 
 ```
 BEFORE acting on any request:

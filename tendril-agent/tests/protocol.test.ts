@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleRequest, emitUpdate, emitResponse, emitError } from '../src/protocol';
-import type { ProtocolContext } from '../src/protocol';
+import { handleRequest, emitUpdate } from '../src/transport/protocol';
+import type { ProtocolContext } from '../src/transport/protocol';
 import type { AcpRequest } from '../src/types';
 
 let output: string[];

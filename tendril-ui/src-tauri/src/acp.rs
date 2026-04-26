@@ -6,7 +6,7 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 
-use crate::events::{chrono_now, handle_agent_line, log_host_to_agent};
+use crate::events::{epoch_millis, handle_agent_line, log_host_to_agent};
 
 const MAX_RAPID_CRASHES: usize = 3;
 const CRASH_WINDOW_SECS: u64 = 30;
@@ -210,7 +210,7 @@ pub async fn connect_agent(
                                 json!({
                                     "direction": "agent-stderr",
                                     "message": trimmed,
-                                    "timestamp": chrono_now(),
+                                    "timestamp": epoch_millis(),
                                 }),
                             );
                         }
@@ -252,7 +252,7 @@ pub async fn connect_agent(
                                     "Agent failed to start after {} attempts. Check the debug log for details.",
                                     MAX_RAPID_CRASHES
                                 ),
-                                "timestamp": chrono_now(),
+                                "timestamp": epoch_millis(),
                             }),
                         );
                     } else {
@@ -261,7 +261,7 @@ pub async fn connect_agent(
                             json!({
                                 "status": "disconnected",
                                 "message": format!("Agent process terminated with code {:?}", payload.code),
-                                "timestamp": chrono_now(),
+                                "timestamp": epoch_millis(),
                             }),
                         );
                         // Emit reconnect-needed — the frontend will trigger
@@ -272,7 +272,7 @@ pub async fn connect_agent(
                             json!({
                                 "status": "reconnecting",
                                 "message": "Agent terminated. Attempting reconnect...",
-                                "timestamp": chrono_now(),
+                                "timestamp": epoch_millis(),
                             }),
                         );
                     }
@@ -309,7 +309,7 @@ pub async fn connect_agent(
     }
 
     // Read workspace path from app config
-    let workspace = crate::read_app_config_inner()
+    let workspace = crate::config::read_app_config_inner()
         .await
         .ok()
         .and_then(|c| {
@@ -346,7 +346,7 @@ pub async fn connect_agent(
         "connection-status",
         json!({
             "status": "connected",
-            "timestamp": chrono_now(),
+            "timestamp": epoch_millis(),
         }),
     );
 

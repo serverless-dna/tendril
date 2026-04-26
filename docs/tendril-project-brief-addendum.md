@@ -41,7 +41,7 @@ github.com/serverless-dna/tendril
   tendril-sandbox/        ← KEEP — Rust crate, Deno subprocess execution
   tendril-ui/             ← KEEP — Tauri + React frontend
   docs/
-    agency-tooling-spec.md
+    agent-capability-spec.md
   README.md
   SPEC.md
 ```
@@ -331,7 +331,7 @@ rl.on('line', async (line) => {
 - Capability registry format (index.json) — identical
 - Tool implementations (tools/*.ts) — identical
 - Deno sandbox execution — identical
-- Agency Tooling spec — identical
+- Agent Capability spec — identical
 - System prompt — identical
 - Tauri UI — identical
 

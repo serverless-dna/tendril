@@ -1,4 +1,4 @@
-# Agency Tooling Specification
+# Agent Capability Specification
 
 **Version**: 1.0.0  
 **Status**: Draft  
@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Agency Tooling (AT) is a pattern for LLM-driven applications in which the model discovers, authors, and reuses tools autonomously. Rather than shipping a fixed toolset, an AT system provides exactly four bootstrap operations — search, register, load, and execute — and a persistent capability registry. The model composes new tools at runtime, stores them for reuse, and retrieves them in future sessions. The registry grows with use; every session is smarter than the last.
+Agent Capability (AC) is a pattern for LLM-driven applications in which the model discovers, authors, and reuses tools autonomously. Rather than shipping a fixed toolset, an AC system provides exactly four bootstrap operations — search, register, load, and execute — and a persistent capability registry. The model composes new tools at runtime, stores them for reuse, and retrieves them in future sessions. The registry grows with use; every session is smarter than the last.
 
 This document specifies the pattern, its data model, its operational protocol, and its security boundary. It is implementation-agnostic: any runtime, model provider, or sandbox technology may be used provided it satisfies the constraints defined here.
 
@@ -124,7 +124,7 @@ The index is stored at `{workspace}/tools/index.json`.
   tools/
     index.json              # CapabilityIndex
     fetch_url.ts            # implementation for "fetch_url" capability
-    summarise_text.ts       # implementation for "summarise_text" capability
+    parse_csv.ts            # implementation for "parse_csv" capability
     ...
 ```
 
@@ -262,7 +262,7 @@ When the model creates a new capability, the following conventions apply:
           ┌──────────────────────────────┐
           │          REGISTERED          │◄──── registerCapability() (upsert)
           └──────────┬───────────────────┘
-                     │ searchCapabilities() → loadTool() → execute()
+                     │ listCapabilities() → loadTool() → execute()
                      ▼
           ┌──────────────────────────────┐
           │           IN USE             │
@@ -324,7 +324,7 @@ Implementations MAY enforce a maximum number of capabilities. The default limit 
 
 ## 8. System Prompt Contract
 
-An AT-compliant system MUST instruct the model with the following behavioural directives (paraphrased — exact wording is implementation-specific):
+An AC-compliant system MUST instruct the model with the following behavioural directives (paraphrased — exact wording is implementation-specific):
 
 1. **List first**: Before acting on any request, call `listCapabilities()` and read the results.
 2. **Load and execute**: If a matching capability is found, load its code and execute it.
@@ -337,7 +337,7 @@ An AT-compliant system MUST instruct the model with the following behavioural di
 
 ## 9. Conformance
 
-An implementation is **AT-conformant** if it satisfies all of the following:
+An implementation is **AC-conformant** if it satisfies all of the following:
 
 1. Exposes exactly four bootstrap tools as defined in §4.
 2. Persists capabilities using the data model defined in §3.

@@ -28,7 +28,7 @@ A user opens the Tendril desktop application and sends a natural-language reques
 
 A user asks Tendril to perform a task for which no tool exists in the capability registry. The agent searches the registry, finds nothing, writes a new TypeScript tool implementation, registers it as a capability with trigger and suppression rules, then executes it to fulfil the request. On a subsequent request matching the same triggers, the agent finds and reuses the existing capability rather than rebuilding it.
 
-**Why this priority**: The self-extending registry is the defining behaviour of the Agency Tooling pattern. Without it, Tendril is a generic chat wrapper.
+**Why this priority**: The self-extending registry is the defining behaviour of the Agent Capability pattern. Without it, Tendril is a generic chat wrapper.
 
 **Independent Test**: Can be tested by sending a request that requires a tool not in the registry (e.g., "fetch this URL"), confirming the tool is created and registered, then sending a similar request and confirming the existing tool is reused.
 

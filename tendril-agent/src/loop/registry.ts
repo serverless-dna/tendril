@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { CapabilityDefinition, CapabilityIndex } from './types.js';
+import type { CapabilityDefinition, CapabilityIndex } from '../types.js';
 
 const VALID_TOOL_NAME = /^[a-z0-9_]+$/;
 

@@ -4,6 +4,27 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Agent restructured into `loop/` and `transport/` layers** — agentic loop (tools, prompt, registry, sandbox) separated from transport (ACP protocol, stream observer, error classification)
+- 4 tool files (`tools/search.ts`, `tools/register.ts`, `tools/load.ts`, `tools/execute.ts`) consolidated into `loop/tools.ts`, ordered by agentic cycle step: SEARCH → LOAD → CREATE → EXECUTE
+- Stream event handling extracted from `index.ts` into `transport/stream.ts` — classifies SDK events into loop phases (think, act, observe, metadata) instead of stringly-typed `if (type === '...')` chains
+- Error classification extracted from `index.ts` into `transport/errors.ts` with single `classifyError()` entry point
+- `index.ts` reduced from 252-line monolith to slim orchestrator — agentic loop now reads as `for await → classifyEvent → switch(phase)`
+- Turn state extracted into `TurnTracker` interface — no more module-level mutable variables
+- **Rust backend split into focused modules** — `lib.rs` (629 lines) split into `config.rs`, `workspace.rs`, `files.rs`, `capabilities.rs` + thin `lib.rs` orchestrator (116 lines)
+- `default_app_config()` now emits nested provider format (`model.bedrock.modelId`) instead of legacy flat format (`model.modelId`) — agent no longer needs to run legacy migration on first boot
+- `chrono_now()` renamed to `epoch_millis()` — function uses `SystemTime`, not the chrono crate
+- Platform-specific code in `reveal_in_file_explorer` extracted into `open_url()` and `reveal_path()` helpers
+- Config validation DRYed up with `validate_positive_int()` helper (replaces 3 identical validation blocks)
+- "Agency Tooling" renamed to "Agent Capability" throughout all docs, specs, and README
+- `docs/agency-tooling-spec.md` renamed to `docs/agent-capability-spec.md` — abbreviation AT→AC, conformance label AT-conformant→AC-conformant
+- `summarise_text` example capability in spec replaced with `parse_csv` (text summarisation is native LLM capability, not a good tool example)
+
+### Removed
+- `docs/archaiv-protocol/` directory
+- `src/prompt.ts`, `src/registry.ts`, `src/sandbox.ts`, `src/protocol.ts` (moved to `loop/` and `transport/`)
+- `src/tools/` directory (consolidated into `loop/tools.ts`)
+
 ## [0.1.5] — 2026-04-25
 
 ## [0.1.4] — 2026-04-25

@@ -2,12 +2,9 @@ import { Agent, Model, type BaseModelConfig } from '@strands-agents/sdk';
 import { BedrockModel } from '@strands-agents/sdk/models/bedrock';
 import { OpenAIModel } from '@strands-agents/sdk/models/openai';
 import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
-import { listCapabilities } from './tools/search.js';
-import { registerCapability } from './tools/register.js';
-import { loadTool } from './tools/load.js';
-import { executeCode } from './tools/execute.js';
-import { TENDRIL_SYSTEM_PROMPT } from './prompt.js';
-import { CapabilityRegistry } from './registry.js';
+import { listCapabilities, registerCapability, loadTool, executeCode } from './loop/tools.js';
+import { TENDRIL_SYSTEM_PROMPT } from './loop/prompt.js';
+import { CapabilityRegistry } from './loop/registry.js';
 import type { WorkspaceConfig } from './config.js';
 import type { Provider } from './types.js';
 

@@ -2,7 +2,7 @@
 
 ## What is Tendril
 
-Tendril is an open source agentic sandbox that demonstrates the Agency Tooling pattern — a self-extending capability registry where the model discovers, builds, and reuses tools autonomously across sessions.
+Tendril is an open source agentic sandbox that demonstrates the Agent Capability pattern — a self-extending capability registry where the model discovers, builds, and reuses tools autonomously across sessions.
 
 It is a reference implementation of three concepts:
 - **Code Mode** — single `run_code` tool backed by sandboxed TypeScript execution
@@ -56,7 +56,7 @@ tendril/
     tendril-registry/      — capability registry CRUD, search
   tendril-ui/              — Tauri + React frontend
   docs/
-    agency-tooling-spec.md   — the AT spec
+    agent-capability-spec.md — the AC spec
     capability-schema.json   — JSON schema for capability definitions
   examples/
     capabilities/            — example Agency Capability definitions
@@ -592,14 +592,14 @@ Second request reuses the capability built in the first. The registry grows. Sub
 - Not a platform (no multi-user, no governance, no RBAC)
 - Not a product (a reference implementation and spec)
 
-Tendril demonstrates the Agency Tooling pattern at personal scale. The enterprise story is for later.
+Tendril demonstrates the Agent Capability pattern at personal scale. The enterprise story is for later.
 
 ---
 
 ## Deliverables
 
 1. Working Rust sidecar binary (`tendril-agent`) with Bedrock provider
-2. `agency-tooling-spec.md` — formal specification
+2. `agent-capability-spec.md` — formal specification
 3. `README.md` — setup, usage, architecture overview
 4. Example capabilities in `examples/capabilities/`
 5. `tendril-ui` — Tauri + React frontend (trace view, chat, capability browser)

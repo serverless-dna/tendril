@@ -1,6 +1,14 @@
+/**
+ * ACP Protocol — JSON-RPC transport between Tauri shell and this sidecar.
+ *
+ * This is the conversation loop (user → agent → user), NOT the agentic loop.
+ * The agentic loop (think → act → observe → repeat) runs inside agent.stream()
+ * and is observed via the stream handler in ./stream.ts.
+ */
+
 import * as readline from 'node:readline';
 import { randomUUID } from 'node:crypto';
-import type { AcpRequest, SessionUpdate } from './types.js';
+import type { AcpRequest, SessionUpdate } from '../types.js';
 
 export interface ProtocolContext {
   sessionId: string | null;
