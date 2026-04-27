@@ -5,7 +5,7 @@
 
 ## Summary
 
-Tendril is an agentic sandbox desktop application demonstrating the Agency Tooling pattern — a self-extending capability registry where the model discovers, builds, and reuses tools autonomously. The implementation uses a Tauri 2.x shell (Rust) hosting a React frontend, with a TypeScript agent sidecar built on the Strands SDK and packaged as a Node.js SEA binary. Communication between host and agent follows the ACP Agent Integrator Specification v1.0.0 over NDJSON/JSON-RPC 2.0.
+Tendril is an agentic sandbox desktop application demonstrating the Agent Capability pattern — a self-extending capability registry where the model discovers, builds, and reuses tools autonomously. The implementation uses a Tauri 2.x shell (Rust) hosting a React frontend, with a TypeScript agent sidecar built on the Strands SDK and packaged as a Node.js SEA binary. Communication between host and agent follows the ACP Agent Integrator Specification v1.0.0 over NDJSON/JSON-RPC 2.0.
 
 ## Technical Context
 

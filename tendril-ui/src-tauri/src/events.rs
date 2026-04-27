@@ -1,3 +1,8 @@
+//! Agent stdout event routing.
+//!
+//! Parses JSON-RPC messages from the agent's stdout and routes
+//! `session/update` notifications to typed Tauri events for the frontend.
+
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
@@ -9,16 +14,16 @@ fn emit_debug(app: &AppHandle, direction: &str, msg: &Value) {
         serde_json::json!({
             "direction": direction,
             "message": msg,
-            "timestamp": chrono_now(),
+            "timestamp": epoch_millis(),
         }),
     );
 }
 
-pub fn chrono_now() -> String {
+/// Current time as epoch milliseconds (string). Used for event timestamps.
+pub fn epoch_millis() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    // Send epoch millis — frontend formats for display
     format!("{}", now.as_millis())
 }
 
@@ -62,7 +67,7 @@ pub fn handle_agent_line(
         return;
     }
 
-    // session/update notification
+    // session/update notification — route to typed Tauri events
     if msg.get("method").and_then(|m| m.as_str()) == Some("session/update") {
         if let Some(update) = msg.pointer("/params/update") {
             let session_update = update
@@ -77,7 +82,6 @@ pub fn handle_agent_line(
                 "agent_message_chunk" => "agent-message-chunk",
                 "tool_call" => "tool-call",
                 "tool_call_update" => "tool-call-update",
-                "message_usage" => "message-usage",
                 "query_result" => "query-result",
                 "prompt_complete" => "prompt-complete",
                 "error" => "agent-error",

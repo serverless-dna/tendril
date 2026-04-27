@@ -13,6 +13,7 @@ export async function executeDeno(
   denoPath: string,
   timeoutMs: number,
   allowedDomains: string[] = [],
+  cancelSignal?: AbortSignal,
 ): Promise<string> {
   const prelude = `const args = ${JSON.stringify(args)};\nconst __workspace = ${JSON.stringify(workspacePath)};\n`;
   const script = `${prelude}\n${code}`;
@@ -68,8 +69,20 @@ export async function executeDeno(
         if (!settled) { settled = true; reject(new Error(`Execution timeout after ${timeoutMs}ms`)); }
       }, timeoutMs);
 
+      // Kill subprocess if the agent is cancelled
+      const onAbort = () => {
+        proc.kill('SIGKILL');
+        if (!settled) { settled = true; reject(new Error('Execution cancelled')); }
+      };
+      if (cancelSignal?.aborted) {
+        onAbort();
+      } else {
+        cancelSignal?.addEventListener('abort', onAbort, { once: true });
+      }
+
       proc.on('close', (exitCode) => {
         clearTimeout(timeout);
+        cancelSignal?.removeEventListener('abort', onAbort);
         if (settled) return;
         settled = true;
         if (exitCode === 0) resolve(stdout.trim() || '(no output)');

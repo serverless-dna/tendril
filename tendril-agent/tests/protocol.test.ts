@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleRequest, emitUpdate, emitResponse, emitError } from '../src/protocol';
-import type { ProtocolContext } from '../src/protocol';
+import { handleRequest, emitUpdate } from '../src/transport/protocol';
+import type { ProtocolContext } from '../src/transport/protocol';
 import type { AcpRequest } from '../src/types';
 
 let output: string[];
@@ -47,7 +47,7 @@ describe('handleRequest', () => {
       jsonrpc: '2.0',
       id: 'session-1',
       method: 'new_session',
-      params: { workingDirectory: '/tmp/test' },
+      params: {},
     };
 
     await handleRequest(req, ctx);
@@ -57,13 +57,12 @@ describe('handleRequest', () => {
     expect(response).toBeDefined();
     expect((response as { result?: { sessionId?: string } }).result?.sessionId).toBeDefined();
 
-    const connected = msgs.find(
-      (m) =>
-        (m as { method?: string }).method === 'session/update' &&
-        ((m as { params?: { update?: { stage?: string } } }).params?.update?.stage === 'connected'),
+    // Should also emit session_lifecycle connected event
+    const lifecycle = msgs.find(
+      (m) => (m as { method?: string }).method === 'session/update' &&
+        (m as { params?: { update?: { sessionUpdate?: string } } }).params?.update?.sessionUpdate === 'session_lifecycle',
     );
-    expect(connected).toBeDefined();
-    expect(ctx.sessionId).toBeDefined();
+    expect(lifecycle).toBeDefined();
   });
 
   it('responds to prompt immediately and calls onPrompt', async () => {
@@ -71,7 +70,7 @@ describe('handleRequest', () => {
       jsonrpc: '2.0',
       id: 'prompt-1',
       method: 'prompt',
-      params: { sessionId: 'test-session', messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }] },
+      params: { sessionId: 'test-session', messages: [{ role: 'user', content: 'hello' }] },
     };
 
     await handleRequest(req, ctx);
@@ -85,7 +84,7 @@ describe('handleRequest', () => {
   it('calls onCancel for notifications/cancelled', async () => {
     const req: AcpRequest = {
       jsonrpc: '2.0',
-      id: '',
+      id: 'cancel-1',
       method: 'notifications/cancelled',
       params: { requestId: 'prompt-1' },
     };

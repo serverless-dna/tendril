@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { execSync } from 'node:child_process';
-import { executeDeno } from '../src/sandbox';
+import { executeDeno } from '../src/loop/sandbox';
 
 let tmpDir: string;
 let denoAvailable: boolean;

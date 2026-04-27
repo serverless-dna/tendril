@@ -71,29 +71,13 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
       };
 
     case 'APPEND_TEXT': {
-      // State machine for text appending:
-      // 1. No assistant message yet → ignore (START_ASSISTANT_MESSAGE should come first)
-      // 2. Assistant message has NO completed tools → append to current text
-      // 3. Assistant message has completed tools AND text is empty → append (post-tool response starting)
-      // 4. Assistant message has completed tools AND text is non-empty → new bubble for post-tool response
+      // Append text to the current assistant message.
+      // Tool calls and text coexist on the same message — no splitting.
       const msgs = [...state.messages];
       const last = msgs[msgs.length - 1];
       if (last?.role !== 'assistant') return state;
-
-      const hasCompletedTools = last.toolCalls.some((tc) => tc.status === 'completed');
-      if (!hasCompletedTools || last.text === '') {
-        // Cases 2 and 3: append to current message
-        msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
-        return { ...state, messages: msgs };
-      }
-      // Case 4: start new bubble for post-tool response
-      return {
-        ...state,
-        messages: [
-          ...msgs,
-          { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, role: 'assistant', text: action.text, toolCalls: [] },
-        ],
-      };
+      msgs[msgs.length - 1] = { ...last, text: last.text + action.text };
+      return { ...state, messages: msgs };
     }
 
     case 'ADD_TOOL_CALL': {
@@ -106,15 +90,18 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
     }
 
     case 'UPDATE_TOOL_CALL': {
+      // Search all messages for the matching toolCallId, not just the last
       const msgs = [...state.messages];
-      const last = msgs[msgs.length - 1];
-      if (last?.role === 'assistant') {
-        const toolCalls = last.toolCalls.map((tc) =>
-          tc.toolCallId === action.toolCallId
-            ? { ...tc, status: action.status as ToolCallEntry['status'], output: action.output }
-            : tc,
-        );
-        msgs[msgs.length - 1] = { ...last, toolCalls };
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const msg = msgs[i];
+        if (msg.role !== 'assistant') continue;
+        const idx = msg.toolCalls.findIndex((tc) => tc.toolCallId === action.toolCallId);
+        if (idx >= 0) {
+          const toolCalls = [...msg.toolCalls];
+          toolCalls[idx] = { ...toolCalls[idx], status: action.status as ToolCallEntry['status'], output: action.output };
+          msgs[i] = { ...msg, toolCalls };
+          break;
+        }
       }
       return { ...state, messages: msgs };
     }
