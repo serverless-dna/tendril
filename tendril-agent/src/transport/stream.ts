@@ -37,8 +37,10 @@ export function classifyEvent(event: unknown): ClassifiedEvent {
     case 'beforeToolCallEvent':
       return { phase: 'act', event: e };
     case 'toolResultEvent':
-    case 'afterToolCallEvent':
       return { phase: 'observe', event: e };
+    case 'afterToolCallEvent':
+      // afterToolCallEvent duplicates toolResultEvent — ignore it
+      return { phase: 'unknown', event: e };
     default:
       return { phase: 'unknown', event: e };
   }
