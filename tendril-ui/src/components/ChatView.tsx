@@ -58,14 +58,21 @@ export function ChatView({ draft, onDraftChange }: ChatViewProps) {
         )}
         {messages.map((msg, idx) => (
           <div key={msg.id}>
-            <MessageBubble
-              role={msg.role}
-              text={msg.text}
-              isStreaming={isProcessing && msg.role === 'assistant' && idx === messages.length - 1}
-            />
-            {msg.toolCalls.map((tc) => (
-              <ToolTrace key={tc.toolCallId} {...tc} />
-            ))}
+            {/* Tool traces render before text — they fire first in the stream */}
+            {msg.toolCalls.length > 0 && (
+              <div className="mb-2">
+                {msg.toolCalls.map((tc) => (
+                  <ToolTrace key={tc.toolCallId} {...tc} />
+                ))}
+              </div>
+            )}
+            {(msg.text || msg.role === 'user') && (
+              <MessageBubble
+                role={msg.role}
+                text={msg.text}
+                isStreaming={isProcessing && msg.role === 'assistant' && idx === messages.length - 1}
+              />
+            )}
             {msg.usage && <TokenUsage {...msg.usage} />}
           </div>
         ))}
