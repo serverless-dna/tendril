@@ -96,10 +96,14 @@ export function handleAct(event: Record<string, unknown>, toolCounter: number): 
 export function handleObserve(event: Record<string, unknown>, lastToolId: string, toolCounter: number): SessionUpdate {
   const result = (event.result as Record<string, unknown>) ?? event;
   const rawOutput = result.content ?? result.result ?? result.text ?? '';
+  // Prefer toolUseId from the event itself; fall back to tracked lastToolId
+  const toolUse = event.toolUse as Record<string, unknown> | undefined;
+  const eventToolId = (toolUse?.toolUseId as string) ?? (event.toolUseId as string);
+  const toolCallId = eventToolId || lastToolId || `tool-${toolCounter}`;
 
   return {
     sessionUpdate: 'tool_call_update',
-    toolCallId: lastToolId || `tool-${toolCounter}`,
+    toolCallId,
     status: 'completed',
     rawOutput: typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput),
     title: (event.name as string) ?? 'unknown',

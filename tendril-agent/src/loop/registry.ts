@@ -40,12 +40,14 @@ export class CapabilityRegistry {
       if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
         return { version: '1.0.0', capabilities: [] };
       }
-      // Corrupted JSON — treat as empty
+      // Corrupted JSON — warn and treat as empty
+      process.stderr.write(`[tendril-agent] Warning: corrupted index.json, treating as empty: ${err instanceof Error ? err.message : String(err)}\n`);
       return { version: '1.0.0', capabilities: [] };
     }
   }
 
   private async saveIndex(index: CapabilityIndex): Promise<void> {
+    await fs.mkdir(this.toolsPath, { recursive: true });
     await fs.writeFile(this.indexPath, JSON.stringify(index, null, 2));
   }
 
@@ -81,11 +83,6 @@ export class CapabilityRegistry {
 
     await this.saveIndex(index);
 
-    try {
-      await fs.access(this.toolsPath);
-    } catch {
-      await fs.mkdir(this.toolsPath, { recursive: true });
-    }
     await fs.writeFile(path.join(this.toolsPath, `${definition.name}.ts`), code);
   }
 

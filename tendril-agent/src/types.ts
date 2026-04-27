@@ -36,7 +36,6 @@ export type SessionUpdateType =
   | 'agent_message_chunk'
   | 'tool_call'
   | 'tool_call_update'
-  | 'message_usage'
   | 'query_result'
   | 'prompt_complete'
   | 'error';

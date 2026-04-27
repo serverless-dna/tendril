@@ -82,7 +82,6 @@ pub fn handle_agent_line(
                 "agent_message_chunk" => "agent-message-chunk",
                 "tool_call" => "tool-call",
                 "tool_call_update" => "tool-call-update",
-                "message_usage" => "message-usage",
                 "query_result" => "query-result",
                 "prompt_complete" => "prompt-complete",
                 "error" => "agent-error",

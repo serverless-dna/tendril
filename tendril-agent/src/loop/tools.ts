@@ -80,7 +80,8 @@ export const executeCode = (registry: CapabilityRegistry, workspacePath: string,
       try {
         code = await registry.load(name);
       } catch (err) {
-        throw new Error(`Cannot execute '${name}': tool not found in registry. Register it first with registerCapability().`);
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Cannot execute '${name}': ${reason}. Register it first with registerCapability().`);
       }
 
       let parsedArgs: Record<string, unknown> = {};

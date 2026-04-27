@@ -148,17 +148,6 @@ function emitTurnEnd(turn: TurnTracker, costs: { inputCostPerToken: number; outp
   const totalTokens = inputTokens + outputTokens;
 
   emitUpdate({
-    sessionUpdate: 'message_usage',
-    message_id: `msg-${Date.now()}`,
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    cache_creation_tokens: 0,
-    cache_read_tokens: 0,
-    total_tokens: totalTokens,
-    duration_ms: durationMs,
-  });
-
-  emitUpdate({
     sessionUpdate: 'query_result',
     cost: inputTokens * costs.inputCostPerToken + outputTokens * costs.outputCostPerToken,
     input_tokens: inputTokens,
