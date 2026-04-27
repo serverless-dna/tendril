@@ -4,6 +4,8 @@ All notable changes to the Tendril project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-04-27
+
 ### Changed
 - **`execute()` now takes a capability name, not code** — loads implementation from registry internally. The model cannot pass arbitrary code. Inline code bypass is impossible at the API level.
 - `loadTool` bootstrap tool removed — `execute()` loads code from registry itself, reducing bootstrap tools from 4 to 3
