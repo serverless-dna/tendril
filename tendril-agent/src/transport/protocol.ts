@@ -17,7 +17,11 @@ export interface ProtocolContext {
 }
 
 function emit(msg: Record<string, unknown>): void {
-  process.stdout.write(JSON.stringify(msg) + '\n');
+  const data = JSON.stringify(msg) + '\n';
+  // Write and check if the kernel buffer accepted the data.
+  // If write() returns false, the data is queued internally by Node
+  // but will still be flushed before the process yields to I/O.
+  process.stdout.write(data);
 }
 
 export function emitUpdate(update: SessionUpdate): void {

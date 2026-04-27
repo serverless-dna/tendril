@@ -77,6 +77,9 @@ async function main() {
             case 'act': {
               const { update, toolCallId } = handleAct(e, turn.toolCount);
               emitUpdate(update);
+              // Yield to the event loop so the pipe flushes the tool_call
+              // event before the SDK resumes and starts tool execution.
+              await new Promise((r) => setImmediate(r));
               turn.lastToolId = toolCallId;
               turn.toolCount++;
               break;
