@@ -74,7 +74,10 @@ export const executeCode = (registry: CapabilityRegistry, workspacePath: string,
       name: z.string().describe('The snake_case name of the registered capability to execute'),
       args: z.string().optional().describe('Optional JSON string of arguments object passed to the code'),
     }),
-    callback: async ({ name, args }) => {
+    callback: async ({ name, args }, context) => {
+      // Extract cancel signal from the Strands SDK tool context
+      const cancelSignal = (context as { agent?: { cancelSignal?: AbortSignal } })?.agent?.cancelSignal;
+
       // Load code from registry — enforces that only registered tools can run
       let code: string;
       try {
@@ -100,6 +103,7 @@ export const executeCode = (registry: CapabilityRegistry, workspacePath: string,
         config.sandbox.denoPath,
         config.sandbox.timeoutMs,
         config.sandbox.allowedDomains,
+        cancelSignal,
       );
     },
   });
